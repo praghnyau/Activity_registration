@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Group Formation — Activity Registration{% endblock %}
+{% block page_title %}Group Formation{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Group Formation</h1>
+</div>
+
+{% if not activity %}
+  {# No activity selected yet: show activities that need group formation #}
+  <p class="text-secondary mb-2">Select an activity below to review registrations and form groups.</p>
+
+  {% if pending_activities %}
+    <div class="card-grid">
+      {% for a in pending_activities %}
+        <div class="card">
+          <div class="flex items-center justify-between mb-1">
+            {% set activity = a %}
+            {% include "partials/activity_status_badge.html" %}
+          </div>
+          <div class="card-title">{{ a.title }}</div>
+          <div class="card-meta">📅 {{ a.starts_at | datetimeformat }}</div>
+          <div class="card-meta">👥 {{ a.registered_count }} registered · Group size {{ a.group_size }}</div>
+          <a href="{{ url_for('admin.group_formation') }}?activity_id={{ a.id }}" class="btn btn-primary btn-sm">Review &amp; Form Groups</a>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty-state">
+      <div class="empty-state-title">No activities currently need group formation.</div>
+      <div class="empty-state-body">Activities appear here once their registration deadline has passed.</div>
+    </div>
+  {% endif %}
+
+{% else %}
+  {# An activity is selected: show the formation workspace #}
+  <div class="page-header">
+    <h2>{{ activity.title }}</h2>
+    {% include "partials/activity_status_badge.html" %}
+  </div>
+  <p class="text-secondary text-sm mb-2">
+    {{ activity.registered_count }} students registered · Target group size: {{ activity.group_size }}
+    <a href="{{ url_for('admin.group_formation') }}" class="ml-1">← Back to all activities</a>
+  </p>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start;">
+
+    {# Left: ungrouped students #}
+    <div class="card">
+      <div class="section-title">Ungrouped Students</div>
+      {% if ungrouped_students %}
+        <form method="post" action="{{ url_for('admin.create_group', activity_id=activity.id) }}" id="create-group-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <div style="display:flex;flex-direction:column;gap:0.4rem;max-height:360px;overflow-y:auto;">
+            {% for student in ungrouped_students %}
+              <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.875rem;">
+                <input type="checkbox" name="student_ids" value="{{ student.id }}">
+                {{ student.name }}
+                <span class="text-secondary text-sm">({{ student.email }})</span>
+              </label>
+            {% endfor %}
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm mt-2">Create Group From Selected</button>
+        </form>
+      {% else %}
+        <p class="text-secondary text-sm">All registered students have been assigned to a group.</p>
+      {% endif %}
+    </div>
+
+    {# Right: proposed / existing groups #}
+    <div>
+      <div class="section-title">Groups ({{ groups | length if groups else 0 }})</div>
+      {% if groups %}
+        <div style="display:flex;flex-direction:column;gap:0.75rem;">
+          {% for group in groups %}
+            <div class="card">
+              <div class="flex items-center justify-between mb-1">
+                <div class="card-title">{{ group.label }}</div>
+                {% set group_status = group.status %}
+                {% include "partials/group_status_badge.html" %}
+              </div>
+              <ul style="list-style:none;font-size:0.875rem;">
+                {% for member in group.members %}
+                  <li style="padding:0.2rem 0;">{{ member.name }}</li>
+                {% endfor %}
+              </ul>
+              <form method="post" action="{{ url_for('admin.remove_group', group_id=group.id) }}" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn btn-secondary btn-sm mt-1">Disband Group</button>
+              </form>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="empty-state">
+          <div class="empty-state-title">No groups created yet.</div>
+          <div class="empty-state-body">Select students on the left and create the first group.</div>
+        </div>
+      {% endif %}
+
+      {% if groups %}
+        <form method="post" action="{{ url_for('admin.finalize_groups', activity_id=activity.id) }}" class="mt-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button
+            type="submit"
+            class="btn btn-primary w-full"
+            {% if ungrouped_students %}disabled aria-disabled="true"{% endif %}
+          >Finalize &amp; Publish Groups</button>
+          {% if ungrouped_students %}
+            <p class="form-hint mt-1">All students must be assigned to a group before finalizing.</p>
+          {% endif %}
+        </form>
+      {% endif %}
+    </div>
+
+  </div>
+{% endif %}
+{% endblock %}
