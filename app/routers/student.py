@@ -87,8 +87,8 @@ async def dashboard(
         a.registered_count = await svc.get_registration_count(db, a.id)
         a.display_status = a.status.value
 
-    # Registrations that need the student to act: not yet grouped, or in a group
-    # that an administrator has disrupted. Left empty since Phase 3.
+    # Registrations the student is still waiting on: registered, but no group
+    # has been finalised for them yet.
     attention_regs = await db.execute(
         select(Registration)
         .options(selectinload(Registration.activity))
@@ -101,7 +101,7 @@ async def dashboard(
     attention = []
     for reg in attention_regs.scalars().all():
         group_status, _label = await group_svc.group_status_for_registration(db, reg)
-        if group_status not in ("not_yet_formed", "awaiting_decision"):
+        if group_status != "not_yet_formed":
             continue
         activity = reg.activity
         if activity.status in (ActivityStatus.cancelled,):
@@ -211,10 +211,17 @@ async def activity_detail(
     withdraw_blocked_reason = None
 
     if my_registration and my_registration.status == RegistrationStatus.registered:
-        # Already registered — show withdraw option
-        if deadline_passed:
+        # Already registered — show withdraw option, but only while registration
+        # is still open. Closing registration freezes the roster for good.
+        registration_open = (
+            activity.status == ActivityStatus.open and not deadline_passed
+        )
+        if not registration_open:
             can_withdraw = False
-            withdraw_blocked_reason = "The registration deadline has passed. Withdrawals are no longer accepted."
+            if activity.status != ActivityStatus.open:
+                withdraw_blocked_reason = "Registration for this activity has closed. Withdrawals are no longer accepted."
+            else:
+                withdraw_blocked_reason = "The registration deadline has passed. Withdrawals are no longer accepted."
         else:
             can_withdraw = True
     elif my_registration and my_registration.status == RegistrationStatus.withdrawn:
@@ -483,8 +490,7 @@ async def my_groups(
                 group_label=group.label,
                 group_size=activity.group_size,
                 member_count=len(names),
-                status=("awaiting_decision" if await group_svc.group_is_disrupted(db, group)
-                        else "group_formed"),
+                status="group_formed",
                 members=names,
                 instructions=getattr(activity, "instructions", None),
             )

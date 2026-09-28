@@ -88,13 +88,21 @@ The formation cutoff still exists as a field, but it governs when group formatio
 5. My Registrations continues to show the entry with status `withdrawn`.
 6. The student may re-register only while the open window is still open. The existing record is updated back to `registered` rather than a new row being inserted.
 
-### Administrator removal once the window is closed
+### Nobody can leave after the window closes
 
-Self-withdrawal is unavailable as soon as registration is closed, which always happens before group formation. So a student can never withdraw while groups are proposed or formed. Removal at that point is an administrator action from the Activity Registrations view within Manage Activities. Then:
+Withdrawal requires `Activity.status == open` **and** the deadline still ahead. Both are checked, so
+closing registration manually freezes the roster even when the deadline has not passed.
 
-- If groups are only **proposed**: the proposal is discarded and must be regenerated. The administrator is shown a warning before confirming the removal.
-- If groups are **finalised**: the affected group is marked `awaiting_decision`. The administrator chooses how to resolve it.
-- In both cases, the student's registration status becomes `withdrawn`.
+This matters because registration always closes before group formation begins. The consequence is
+that the roster is frozen at exactly the moment groups are built from it, and therefore:
+
+- a student can never withdraw while groups are proposed or finalised, and
+- an administrator cannot remove a student at all.
+
+The second point is deliberate. There is no administrative removal route. Once the roster is frozen it
+is correct for the lifetime of the activity, and since every group is built from a frozen roster, a
+finalised group can never lose a member. Groups therefore need no repair path, and no
+`awaiting_decision` state exists.
 
 ### Backend enforcement
 
@@ -153,7 +161,9 @@ Leftover students are never resolved automatically. The system proposes the comp
 | Add to existing groups | Leftovers are distributed among the already-proposed groups, making them larger than the required size |
 | Create a new group from the leftovers | All leftovers go into one additional group, smaller than the required size |
 
-Both options place every leftover student, so there is no `awaiting_decision` state during formation. `awaiting_decision` exists only for the separate case of a finalised group disrupted by an administrator removing a student (see section 2).
+Both options place every leftover student, so no student is ever left without a group and finalisation
+is blocked until one of the two is chosen. There is no pending or undecided state during formation,
+and no state after it either — see section 2.
 
 **Availability.** "Add to existing groups" requires at least one complete proposed group. If the eligible students do not fill even one group, that option is not offered and the new-group option is the only way forward.
 
@@ -384,51 +394,21 @@ Required additions:
 
 ---
 
-## 11. Administrator removal of a student
+## 11. The roster is frozen once registration closes
 
-An administrator can remove a student from an activity's registrations. This was built in Phase 6 and
-introduced several decisions that the earlier phases had not settled.
+An earlier draft of this document described an administrator removal action: an admin removes a
+student, and if that student is already in a finalised group the group is flagged `awaiting_decision`
+for the remaining members. That action and that state have both been removed.
 
-### The registration is withdrawn, never deleted
+The reason is that they are unnecessary, and in fact unreachable. Withdrawal is only possible while
+registration is open, and no administrative removal exists. Registration closes before group formation
+starts, so by the time any group is finalised every member of it has a `registered` registration that
+cannot be withdrawn and cannot be touched by anyone else.
 
-Removing a student sets `Registration.status = 'withdrawn'`. The row is kept so the audit trail shows
-what happened, and so the student can be re-registered later without a second insert.
+A finalised group is therefore permanent, and needs no "disrupted" concept, no decision for an
+administrator to make, and no resolution path. An earlier version of this feature did add all three,
+along with a `GroupMember` row that survived its student's removal purely as an audit trail.
 
-### What happens to the groups depends on when the removal happens
-
-| Activity state at removal | Effect |
-|---|---|
-| `draft` / `open` | Registration is withdrawn. Nothing else changes. |
-| `groups_proposed` | The whole proposal is **discarded** and the activity returns to `registration_closed`. It must be formed again from scratch. |
-| `groups_formed` | The group is **kept intact**, including the removed student's `GroupMember` row. The remaining members are flagged `Awaiting Admin Decision`. |
-
-Resetting the activity status when a proposal is discarded is not optional. Without it the activity
-sits in `groups_proposed` with no groups left, and because formation only runs from
-`registration_closed` there is no way back to a valid state without editing the database.
-
-### `awaiting_decision` is derived, not stored
-
-`GroupStatus` has no `awaiting_decision` member and none was added. A group counts as disrupted when
-any of its members has a registration that is no longer `registered`; that check is what produces the
-student-facing state.
-
-The two states this produces are deliberately asymmetric:
-
-- The **removed student** derives `no_group` and no longer sees the group at all. They have no
-  registration, so there is nothing to show them.
-- The **remaining students** keep their group and see `Awaiting Admin Decision`.
-
-Group membership rows are never deleted, so the group still lists correctly and the history is intact.
-
-### Open: what resolves `awaiting_decision`
-
-The design states the state but not the way out of it. No route, service function, or UI exists for
-any of the plausible resolutions:
-
-- dissolve the group and re-form everyone,
-- replace just the removed student,
-- accept the shrunken group as final,
-- or anything else.
-
-This is intentionally left unimplemented rather than guessed at. It needs a product decision before
-Phase 7 can treat this state as handled.
+What remains is the read-only Activity Registrations view inside Manage Activities, which shows who
+is registered, their registration status, and their group if one has been formed. It offers no
+mutating action.

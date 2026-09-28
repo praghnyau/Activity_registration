@@ -164,7 +164,6 @@ These are tracked separately. A student can be successfully registered while the
 |---|---|
 | `not_yet_formed` | Group formation has not happened |
 | `group_formed` | Members are assigned and saved |
-| `awaiting_decision` | A finalised group was disrupted by an administrator removing a student, and needs a decision |
 | `no_group` | The student was not placed in a group |
 
 ---
@@ -214,7 +213,7 @@ These are tracked separately. A student can be successfully registered while the
 - Registering, withdrawing, and re-registering are all permitted inside one **open window**, which requires both that the activity is open (or full) and that the registration deadline has not passed. All three are blocked outside it. There is no separate withdrawal rule.
 - **Closing registration freezes the roster.** Only students registered at that moment take part, and withdrawals are blocked from that point.
 - **Reopening registration restores the window.** Provided groups have not been proposed and the deadline has not passed, students once again have the option to register or withdraw.
-- Because registration always closes before group formation, a student can never withdraw while groups are proposed or formed. Discarding a proposal on withdrawal is only relevant to the administrator removal path.
+- Because registration always closes before group formation, a student can never withdraw while groups are proposed or formed, and there is no administrative removal. A finalised group is therefore permanent and never needs repairing.
 - If a student withdraws and the activity was full, it returns to `open` if otherwise open.
 - A withdrawn student may re-register only while the open window is still open. That updates the existing registration record back to `registered`.
 
@@ -238,7 +237,7 @@ The administrator chooses one of exactly two options:
 1. **Add to existing groups** — distributes the leftover students among the groups that were already proposed, making those groups larger than the required size.
 2. **Create a new group from the leftovers** — puts all leftover students together in one additional group, which is smaller than the required size.
 
-Both options place every leftover student, so no student is ever left without a group. There is no "leave pending" option and no `awaiting_decision` state during formation — finalisation is blocked until the administrator picks one of the two options.
+Both options place every leftover student, so no student is ever left without a group. There is no "leave pending" option — finalisation is blocked until the administrator picks one of the two options.
 
 Neither option edits the activity's `group_size`. A group may end up larger or smaller than the required size, and that is expected.
 

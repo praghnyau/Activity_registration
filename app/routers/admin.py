@@ -536,36 +536,10 @@ async def activity_registrations(
             "pagination": listing["pagination"],
             "activity": result["activity"],
             "rows": result["rows"],
-            "can_remove_student": result["can_remove_student"],
+
             "sub_view": "registrations",
             "active_nav": "manage_activities",
         },
-    )
-
-
-@router.post("/registrations/{registration_id}/remove", name="admin.remove_registration")
-async def remove_registration(
-    request: Request,
-    registration_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_admin),
-):
-    form = await request.form()
-    if not check_csrf(request, form.get("csrf_token", "")):
-        add_flash(request, "That form expired. Reload the page and try again.", "error")
-        return RedirectResponse(url="/admin/activities", status_code=303)
-
-    # Read the activity first so the redirect lands back on the right sub-view.
-    registration = await db.get(Registration, registration_id)
-    activity_id = registration.activity_id if registration else None
-
-    ok, message = await group_svc.remove_student_registration(db, registration_id)
-    add_flash(request, message, "success" if ok else "error")
-
-    if activity_id is None:
-        return RedirectResponse(url="/admin/activities", status_code=303)
-    return RedirectResponse(
-        url=f"/admin/activities/{activity_id}/registrations", status_code=303
     )
 
 

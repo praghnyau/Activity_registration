@@ -138,7 +138,12 @@ async def withdraw_student(
     Rules:
     - Only the student who registered can withdraw
     - Only if status is 'registered'
-    - Only before registration_deadline
+    - Only while registration is still open: status must be `open` and the
+      deadline must not have passed
+
+    Because a withdrawal is impossible once registration has closed, the roster
+    is frozen by the time groups are finalised. A finalised group can therefore
+    never lose a member, and no "awaiting decision" state is reachable.
     """
     now = datetime.now(tz=IST)
 
@@ -159,8 +164,10 @@ async def withdraw_student(
     if registration.status != RegistrationStatus.registered:
         return False, "This registration is not active."
 
-    # Rule: deadline must not have passed
+    # Rule: withdrawal is only possible while registration is still open
     activity = registration.activity
+    if activity.status != ActivityStatus.open:
+        return False, "Registration for this activity has closed. Withdrawals are no longer accepted."
     if now > activity.registration_deadline.astimezone(IST):
         return False, "The registration deadline has passed. Withdrawals are no longer accepted."
 
@@ -226,14 +233,18 @@ async def list_my_registrations(
         activity.display_status = activity.status.value
         deadline_passed = now > activity.registration_deadline.astimezone(IST)
 
-        # Determine can_withdraw
+        # Determine can_withdraw. Withdrawal is only possible while registration
+        # is still open, which is what keeps a finalised group intact forever.
+        registration_open = (
+            activity.status == ActivityStatus.open and not deadline_passed
+        )
         can_withdraw = (
             reg.status == RegistrationStatus.registered
-            and not deadline_passed
+            and registration_open
         )
         withdraw_blocked_reason = None
-        if reg.status == RegistrationStatus.registered and deadline_passed:
-            withdraw_blocked_reason = "Registration deadline has passed."
+        if reg.status == RegistrationStatus.registered and not registration_open:
+            withdraw_blocked_reason = "Registration for this activity has closed. Withdrawals are no longer accepted."
 
         # Group status uses the keys defined in template-contract.md. A
         # withdrawn or cancelled registration has no group. A proposal that is
@@ -257,21 +268,29 @@ async def list_my_registrations(
             if row:
                 gm, group = row
                 if group.status == GroupStatus.finalised:
-                    # A group disrupted by an administrator removal reports
-                    # `awaiting_decision`, not `group_formed`.
                     from app.services import group_service as group_svc
 
-                    if await group_svc.group_is_disrupted(db, group):
-                        group_status = "awaiting_decision"
-                    else:
-                        group_status = "group_formed"
-                    # Count members in the group
+                    # One source of truth for the status key, shared with My
+                    # Groups and the admin registrations view.
+                    group_status, group_label = await group_svc.group_status_for_registration(
+                        db, reg
+                    )
                     count_result = await db.execute(
-                        select(func.count()).where(GroupMember.group_id == group.id)
+                        select(func.count())
+                        .select_from(GroupMember)
+                        .join(
+                            Registration,
+                            (Registration.student_id == GroupMember.student_id)
+                            & (Registration.activity_id == group.activity_id),
+                        )
+                        .where(
+                            GroupMember.group_id == group.id,
+                            Registration.status == RegistrationStatus.registered,
+                        )
                     )
                     member_count = count_result.scalar() or 0
                     group_summary = {
-                        "label": group.label,
+                        "label": group_label,
                         "member_count": member_count,
                     }
         else:

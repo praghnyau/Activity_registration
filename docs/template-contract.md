@@ -62,7 +62,6 @@ These are the only valid values for each status field. The status badge componen
 |---|---|
 | `not_yet_formed` | Not yet formed |
 | `group_formed` | Group formed |
-| `awaiting_decision` | Awaiting admin decision |
 | `no_group` | No group assigned |
 
 ### Activity card object
@@ -105,7 +104,7 @@ Used on the Dashboard, Available Activities, and Closed Activities pages.
 |---|---|---|
 | `stats` | object | `available_count`, `registered_count`, `groups_formed_count` |
 | `upcoming_activities` | list | List of activity card objects |
-| `attention_items` | list | Registrations whose group is `not_yet_formed` or `awaiting_decision`. Each item has `activity_id`, `activity_title`, `starts_at`, `registration_status`, `group_status` |
+| `attention_items` | list | Registrations whose group is `not_yet_formed`. Each item has `activity_id`, `activity_title`, `starts_at`, `registration_status`, `group_status` |
 
 ---
 
@@ -268,7 +267,9 @@ This view is rendered when the administrator selects an activity to inspect its 
 |---|---|---|
 | `activity` | object | `id`, `title`, `display_status`, `capacity`, `registered_count` |
 | `rows` | list | See registration row object below |
-| `can_remove_student` | bool | Whether the administrator can remove a student from this activity |
+
+The view is read-only. Students are the only ones who can leave an activity, and only while
+registration is open, so there is no removal action and no `can_remove_student` flag.
 
 The sub-view is active when `sub_view == 'registrations'`. It is rendered from inside
 `admin/manage_activities.html` as an `{% if sub_view == 'registrations' and rows is defined %}`

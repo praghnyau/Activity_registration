@@ -111,16 +111,15 @@ The build is split into phases. Each phase produces something testable before th
   capacity count is taken inside that lock. What is *not* yet done is the Phase 7 test that proves it
   under real concurrency — the behaviour is implemented but unverified.
 
-- [ ] `can_withdraw` checks the deadline only. It does not check `Activity.status`, so the withdraw
-      option can still be offered on an activity that is `cancelled` or `groups_formed`. Same gap in
-      `registration_service.can_withdraw` and in the withdraw service itself.
+- [x] `can_withdraw` requires `Activity.status == open` as well as the deadline being ahead, in both
+      the detail page and My Registrations, and `withdraw_student` enforces the same rule. Closing
+      registration freezes the roster even when the deadline has not passed.
 - [ ] `can_register` allows re-registration when `Activity.status == full`, so a student who withdrew
       can take a slot that the capacity check in `register_student` will then reject. The button and
       the service disagree.
-- [ ] Group status in My Registrations is computed by duplicated logic in `registration_service`
-      rather than by the shared `group_service.group_status_for_registration`, and its member count
-      includes withdrawn students. My Groups uses the correct active-member count; these two lists are
-      not yet consistent with each other.
+- [x] My Registrations now calls the shared `group_service.group_status_for_registration` instead of
+      duplicating it, and its member count joins on `Registration` so only registered students are
+      counted. My Groups and My Registrations agree.
 
 ### Frontend
 
@@ -225,15 +224,14 @@ objects with `.name`, not plain strings as the contract stated. The contract has
 
 - [x] Profile route: `GET /profile`, `POST /profile/password`
 - [x] Password change: verify current password, hash and save new password, end other sessions
-- [x] Admin registrations route: `GET /admin/activities/{id}/registrations`
-- [x] Remove student from registration route: `POST /admin/registrations/{id}/remove`
+- [x] Admin registrations route: `GET /admin/activities/{id}/registrations` (read-only)
 - [x] `GET /student/dashboard` populates `attention_items` (was hardcoded `[]` since Phase 3)
 
 ### Frontend
 
 - [x] `student/profile.html`: read-only fields, change password form, error display
 - [x] Admin registrations sub-view within `manage_activities.html`: student list with status badges,
-      remove student action behind a confirmation dialog
+      read-only, with a note explaining that the roster is frozen
 
 **Done when**: Users can change their password and administrators can manage individual registrations.
 
@@ -249,28 +247,17 @@ The version comparison deliberately tolerates cookies with **no** `session_versi
 deploying this does not sign out every existing session at once. Requiring the key would be stricter
 but is a separate decision — see "Still open" below.
 
-**Administrator removal.** `group_service.remove_student_registration` sets the registration to
-`withdrawn` and behaves differently depending on where the activity is:
+**No administrative removal.** There is deliberately no route for an administrator to remove a
+student, and no `awaiting_decision` state. Both were built in an earlier pass and then removed.
 
-- *groups still proposed* — the proposal is deleted and `Activity.status` is reset from
-  `groups_proposed` to `registration_closed`, so formation can be run again. Without the status
-  reset the activity would be permanently stuck: no groups would exist, and `start_formation` only
-  accepts `registration_closed`.
-- *groups already finalised* — the group is left intact and the `GroupMember` row is kept as an
-  audit trail. The remaining members derive the status `awaiting_decision`; the removed student
-  derives `no_group` and no longer sees the group at all.
+Withdrawal requires `Activity.status == open` *and* the deadline still ahead, and registration always
+closes before formation begins. The roster is therefore frozen at the moment groups are built from it,
+so a finalised group can never lose a member: nobody can withdraw from it, and nobody else can touch
+it. A finalised group is permanent and needs no repair path.
 
-**`awaiting_decision` is derived, never stored.** `GroupStatus` has no such member and the withdrawn
-registration is the signal. It is computed by `group_status_for_registration`, which resolves the
-student's own group via `GroupMember` and then asks `group_is_disrupted` whether anyone in that
-group is no longer registered. The lookup is scoped to the group the student is actually in — an
-earlier version returned the activity's first finalised group, which reported one student's group
-disruption to the students of a different group.
-
-**Still open — needs a product decision.** `awaiting_decision` names a state but no way out of it.
-There is no route, service function, or UI for dissolving and re-forming the group, replacing just
-the removed student, or accepting a shrunken group as final. Until that is decided, Phase 6
-intentionally shows the state rather than resolving it automatically.
+**What that removed.** `group_service.remove_student_registration`, `group_is_disrupted`, the
+`awaiting_decision` status key, and `can_remove_student` in the registrations context. The
+registrations sub-view stays, but read-only.
 
 ---
 
@@ -292,13 +279,10 @@ intentionally shows the state rather than resolving it automatically.
 - The locking in `register_student` is already in place (`SELECT … FOR UPDATE` on `Activity`), so
   this item is about *proving* it. A test needs two concurrent registrations against an activity
   with one remaining slot and must show exactly one success.
-- `can_withdraw` and `can_register` disagree with the service layer in the two cases listed under
-  Phase 3: withdrawal ignores `Activity.status`, and re-registration is offered while the activity is
-  `full` but then rejected by the capacity check.
+- `can_register` still offers re-registration while the activity is `full`, but `register_student`
+  then rejects it on capacity. The button and the service disagree — listed under Phase 3.
 - `registration_service` still duplicates the group-status logic that Phase 6 consolidated in
   `group_service`, and counts withdrawn students as members.
-- `awaiting_decision` needs a resolution path before this state can be considered handled. This is the
-  one item here that is blocked on a product decision rather than on effort.
 
 ### Frontend
 

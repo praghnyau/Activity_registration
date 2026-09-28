@@ -432,14 +432,15 @@ async def list_activity_registrations(db: AsyncSession, activity_id: int) -> dic
     """
     Every registration for an activity, with the student's group assignment.
 
-    Rows carry the group status the same way student-facing views do, so the
-    admin sees `awaiting_decision` for a finalised group that lost a member.
+    Read-only. Students are the only ones who can leave an activity, and only
+    until registration closes, so there is no administrative removal to offer
+    here.
     """
     from app.services import group_service as group_svc
 
     activity = await db.get(Activity, activity_id)
     if activity is None:
-        return {"activity": None, "rows": [], "can_remove_student": False}
+        return {"activity": None, "rows": []}
 
     rows = await db.execute(
         select(Registration, User)
@@ -469,15 +470,7 @@ async def list_activity_registrations(db: AsyncSession, activity_id: int) -> dic
     activity.display_status = activity.status.value
     activity.registered_count = registered_count
 
-    # Removal is an administrator action available once registration has closed;
-    # while the activity is still open the student can withdraw themselves.
-    can_remove = activity.status not in (
-        ActivityStatus.draft,
-        ActivityStatus.open,
-        ActivityStatus.full,
-    )
-
-    return {"activity": activity, "rows": entries, "can_remove_student": can_remove}
+    return {"activity": activity, "rows": entries}
 
 
 CLOSED_STATUSES = (

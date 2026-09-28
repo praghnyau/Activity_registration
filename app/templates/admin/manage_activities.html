@@ -31,13 +31,10 @@
       <span>{{ activity.registered_count }}{% if activity.capacity %} / {{ activity.capacity }}{% endif %} registered</span>
     </div>
 
-    {% if can_remove_student %}
-      <p class="form-help">
-        Removing a student deletes their registration but keeps the group record as an audit
-        trail. If groups are still a proposal, removing anyone discards the proposal and it must
-        be formed again.
-      </p>
-    {% endif %}
+    <p class="form-help">
+      Students can withdraw on their own until registration closes. Once it closes the roster is
+      frozen: nobody can be added or removed afterwards, so the groups formed from it stay complete.
+    </p>
 
     {% if rows %}
       <div class="table-wrap">
@@ -50,7 +47,6 @@
               <th scope="col">Registered</th>
               <th scope="col">Status</th>
               <th scope="col">Group</th>
-              {% if can_remove_student %}<th scope="col"><span class="sr-only">Actions</span></th>{% endif %}
             </tr>
           </thead>
           <tbody>
@@ -73,38 +69,6 @@
                     <span class="text-muted">—</span>
                   {% endif %}
                 </td>
-                {% if can_remove_student %}
-                  <td>
-                    {% if row.registration_status == 'registered' %}
-                      <button type="button" class="btn btn-danger btn-sm" data-dialog-open="remove-reg-{{ row.registration_id }}">
-                        Remove
-                      </button>
-                      <div class="dialog" id="remove-reg-{{ row.registration_id }}" role="dialog" aria-modal="true" aria-labelledby="remove-reg-{{ row.registration_id }}-title" {% if loop.index0 > 0 %}hidden{% endif %}>
-                        <div class="dialog-body">
-                          <h2 class="dialog-title" id="remove-reg-{{ row.registration_id }}-title">Remove {{ row.student_name }}?</h2>
-                          <p class="dialog-text">
-                            This deletes their registration for <strong>{{ activity.title }}</strong>.
-                            It cannot be undone.
-                            {% if row.group_label %}
-                              They are currently in <strong>{{ row.group_label }}</strong>; the group
-                              record is kept, but the remaining members will be flagged
-                              <em>Awaiting Admin Decision</em>.
-                            {% endif %}
-                          </p>
-                          <div class="dialog-actions">
-                            <button class="btn btn-secondary" data-dialog-cancel>Keep Student</button>
-                            <form method="post" action="{{ url_for('admin.remove_registration', registration_id=row.registration_id) }}" style="display:inline;">
-                              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                              <button type="submit" class="btn btn-danger">Remove Student</button>
-                            </form>
-                          </div>
-                        </div>
-                      </div>
-                    {% else %}
-                      <span class="text-muted">—</span>
-                    {% endif %}
-                  </td>
-                {% endif %}
               </tr>
             {% endfor %}
           </tbody>
