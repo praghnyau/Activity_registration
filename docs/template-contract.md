@@ -23,8 +23,9 @@ This document defines every variable the backend must pass to each Jinja2 templa
 |---|---|---|
 | `current_user` | object | `id`, `name`, `email`, `role`, `student_id` (or `None`) |
 | `flashed_messages` | list | Each item has `category` (`success`, `error`, `info`) and `text` |
-| `csrf_token` | string | Included as a hidden field in every form |
+| `csrf_token` | string | Must be placed as a hidden field in every form: `<input type="hidden" name="csrf_token" value="{{ csrf_token }}">`. The base template does not insert it automatically — each form is responsible. |
 | `active_nav` | string | Key of the current navigation item, used to highlight the active sidebar link |
+| `page_error` | object or None | Present when a page-level error occurs (e.g. activity not found, access denied). Has `code` (e.g. `404`, `403`) and `message`. When set, the template should render an error state instead of normal content. `None` on all normal page loads. |
 
 ---
 
@@ -72,7 +73,7 @@ Used on the Dashboard, Available Activities, and Closed Activities pages.
 |---|---|---|
 | `id` | int/uuid | Activity ID |
 | `title` | string | Activity title |
-| `short_description` | string | Description trimmed to a card-sized excerpt |
+| `short_description` | string | Description trimmed to a maximum of 200 characters at a word boundary, with an ellipsis appended if truncated |
 | `starts_at` | datetime | Date and time of the activity |
 | `duration_minutes` | int | Duration |
 | `location` | string or None | Venue or meeting link |
@@ -255,7 +256,9 @@ Used on the Dashboard, Available Activities, and Closed Activities pages.
 
 ---
 
-### Activity Registrations — `admin/registrations.html`
+### Activity Registrations sub-view — within `admin/manage_activities.html`
+
+This view is rendered when the administrator selects an activity to inspect its registrations. It is not a separate template file. The variables below are passed alongside the main Manage Activities variables when the registrations sub-view is active.
 
 | Variable | Type | Contents |
 |---|---|---|
@@ -284,8 +287,8 @@ Used on the Dashboard, Available Activities, and Closed Activities pages.
 | `activity` | object | `id`, `title`, `group_size`, `display_status` |
 | `summary` | object | `eligible_count`, `complete_groups_possible`, `leftover_count`, `has_history` |
 | `formation_state` | string | `not_started`, `proposed`, or `finalised` |
-| `proposal` | list or None | Proposed groups when `formation_state` is `proposed`; each group has `label` and `members` (list of names) |
-| `leftovers` | list | List of student names who did not fit into a complete group |
+| `proposal` | list or None | Proposed groups when `formation_state` is `proposed`; each group has `label` and `members` (list of objects with `id` and `name`) |
+| `leftovers` | list | List of leftover student objects with `id` and `name` — needed so the administrator can take action on specific students |
 | `leftover_options` | list of strings | Options currently available: `smaller_group`, `change_group_size`, `leave_pending` |
 | `can_start` | bool | True if group formation can be started |
 | `can_finalise` | bool | True if groups can be finalised (all leftovers resolved) |

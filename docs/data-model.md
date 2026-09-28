@@ -42,6 +42,7 @@ Notes:
 - `email` is the login identifier. It must be unique across all roles.
 - `password_hash` is produced by Passlib with bcrypt. The raw password is never stored or logged.
 - Role is read from the database on every request. It is not trusted from the session cookie.
+- `student_id` is optional but if present should be unique. A UNIQUE constraint is recommended. If two students are accidentally assigned the same institutional ID, login and identity lookups could be ambiguous.
 
 ---
 
@@ -69,7 +70,8 @@ One row per activity created by an administrator.
 **Status enum values**: `draft`, `open`, `full`, `registration_closed`, `groups_proposed`, `groups_formed`, `cancelled`, `completed`
 
 Notes:
-- `full` is computed from the current registration count vs capacity. It is stored to avoid repeated counts, but must be recalculated when registrations change.
+- `full` is **not a separately stored value that is set and forgotten**. It is recomputed by the service layer whenever a registration is added, withdrawn, or cancelled, and the stored status is updated at that point. This keeps the stored status accurate without requiring a count on every read.
+- The service layer is the single place responsible for recomputing and persisting this transition. No other code path changes the status to or from `full`.
 - `groups_proposed` is only visible to administrators. Students never see this status.
 - No `category` column. Categories are out of version 1.
 
@@ -93,7 +95,7 @@ Resource links attached to an activity. Up to 5 per activity.
 
 Notes:
 - Version 1 uses only `kind = 'link'`, `title`, and `url`.
-- The file columns are reserved so the schema does not need to change when file upload is added.
+- The file columns are reserved so the schema does not need to change when file upload is added. When that phase begins, a migration will add NOT NULL constraints or defaults to whichever columns become required, and the `kind` enum will be extended.
 - `url` must pass validation: starts with `https://`.
 
 ---
@@ -132,6 +134,7 @@ One row per group per activity.
 | `status` | ENUM(`proposed`, `finalised`) | NOT NULL | Proposal state |
 | `formed_at` | TIMESTAMPTZ | NULLABLE | Set when status becomes `finalised` |
 | `created_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | Creation time |
+| `updated_at` | TIMESTAMPTZ | NOT NULL, DEFAULT now() | Last update time — set when proposal is discarded or group is finalised |
 
 Notes:
 - `proposed` groups are only visible to administrators.
@@ -152,7 +155,11 @@ Maps students to groups. One row per student per group.
 
 **Primary key**: `(group_id, student_id)`
 
-**Additional constraint**: a student can belong to at most one finalised group per activity. Enforced by the application layer during formation.
+**Additional constraint**: a student can belong to at most one finalised group per activity. This is enforced at two levels:
+1. **Application layer** — the formation service checks before inserting.
+2. **Database layer** — a unique index on `(student_id, activity_id)` filtered to `status = 'finalised'` groups via a partial index or enforced through the application's transaction. Since PostgreSQL does not support partial unique constraints across two tables directly, the application layer must verify uniqueness within the transaction before committing.
+
+This dual enforcement means a race condition or a hand-crafted request cannot silently place a student in two finalised groups for the same activity.
 
 ---
 
@@ -208,13 +215,15 @@ Recommended indexes beyond primary keys:
 | Table | Column(s) | Reason |
 |---|---|---|
 | `users` | `email` | Login lookup |
+| `users` | `student_id` | Institutional ID lookup (if uniqueness constraint is added) |
 | `activities` | `status` | Filtering by status |
 | `activities` | `starts_at` | Sorting and date filtering |
 | `registrations` | `student_id` | My Registrations queries |
 | `registrations` | `activity_id` | Registration count queries |
 | `registrations` | `(student_id, activity_id)` | Unique constraint / duplicate check |
 | `groups` | `activity_id` | Group queries per activity |
-| `group_members` | `student_id` | Member lookup |
+| `group_members` | `group_id` | Fetching all members of a group |
+| `group_members` | `student_id` | Member lookup across activities |
 
 ---
 

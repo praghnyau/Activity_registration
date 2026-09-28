@@ -171,7 +171,7 @@ The current page is highlighted in the sidebar using the `active_nav` variable p
 - Password field with a show/hide toggle.
 - Login button.
 - Clear validation and error messages.
-- Theme toggle.
+- Theme toggle — positioned in the top-right corner of the login page as a standalone icon button (the page has no sidebar or top bar, so the toggle floats independently).
 - Line below password field: "Forgot your password? Contact your administrator."
 
 **Behaviour**
@@ -237,8 +237,8 @@ No category filter (categories are out of version 1).
 
 **Behaviour**
 - When `can_register` is true: show a prominent **Register for Activity** button.
-- The student's name and email are pre-filled from their account (read only).
-- A confirmation step is shown before submission.
+- The student's name and email are displayed read-only on the details page as a reminder of who is registering. They are not editable.
+- Clicking Register shows an inline **confirmation step** on the same page (a dialog or a confirmation section) before the form is actually submitted. The student confirms their name, email, and the activity. On confirm, the form POSTs to the registration route, and the server redirects to the Registration Confirmation page.
 - If the student has already registered, show their current registration and group status instead of the register button.
 - When `can_withdraw` is true: show a **Withdraw** button.
 - When `register_blocked_reason` is set: show it below the disabled button.
@@ -468,11 +468,11 @@ All leftovers must have a decision before finalisation is enabled.
 | Confirmation dialog | Shown before destructive or irreversible actions |
 | Form field | Label, input, error message, locked state |
 | Empty state | Illustration, message, and optional action |
-| Loading indicator | Shown while data loads |
-| Error state | Message with a retry option |
+| Loading indicator | A simple centred spinner or skeleton shown while the page is fetching data. Replaces the content area until data arrives. |
+| Error state | A message ("Something went wrong.") with a Retry button that reloads the data. Replaces the content area. Never shows a blank page. |
 | Notification / flash message | Success, error, and info messages from flashed_messages |
 | Theme toggle | Sun/moon button that writes to localStorage and updates the theme attribute |
-| Pagination | Page controls for lists |
+| Pagination | Page controls for lists. When a filter value changes, the page resets to page 1 automatically — the backend always receives the new filter with `page=1` unless the user explicitly navigates to a different page. |
 
 ---
 
@@ -554,11 +554,12 @@ templates/
 └── admin/
     ├── dashboard.html
     ├── activity_form.html
-    ├── manage_activities.html
-    ├── registrations.html
+    ├── manage_activities.html  # Includes the registrations sub-view for a selected activity
     ├── group_formation.html
     └── group_history.html
 ```
+
+Note: there is no separate `registrations.html`. The activity registrations view (student list for a selected activity) is rendered within `manage_activities.html` when an activity is selected. The template contract for this view is documented under the Manage Activities section.
 
 ---
 

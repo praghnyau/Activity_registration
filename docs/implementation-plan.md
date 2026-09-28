@@ -17,6 +17,8 @@ The build is split into phases. Each phase produces something testable before th
 ### Backend
 
 - [ ] Project scaffold: folder structure, `requirements.txt`, `.env.example`, Alembic config
+- [ ] `.gitignore` set up to exclude `.env`, `__pycache__`, `.venv`, and any local SQLite files. Verify `.env` is never committed.
+- [ ] `.env.example` committed with placeholder values for all required keys (`DATABASE_URL`, `SESSION_SECRET_KEY`, `DEBUG`)
 - [ ] Database connection: async SQLAlchemy engine and session factory
 - [ ] All ORM models: `users`, `activities`, `resources`, `registrations`, `groups`, `group_members`
 - [ ] Initial Alembic migration
@@ -106,7 +108,7 @@ The build is split into phases. Each phase produces something testable before th
 ### Backend
 
 - [ ] Group formation service (`app/services/group_formation.py`):
-  - Build previous-pair history from finalised groups
+  - Build previous-pair history from finalised groups. Note: this query joins `groups` and `group_members` across all past activities — it is acceptable at college scale (hundreds of students, tens of activities) without caching. If the dataset grows significantly, the pair-history lookup should be cached per formation run, not recomputed on every candidate check.
   - Shuffle eligible students
   - Greedy assignment minimising repeat pairs
   - Return proposed groups and leftovers
@@ -160,7 +162,7 @@ The build is split into phases. Each phase produces something testable before th
 ### Frontend
 
 - [ ] `student/profile.html`: read-only fields, change password form, theme three-way control, error display
-- [ ] `admin/registrations.html`: student list with status badges, remove student action
+- [ ] Admin registrations sub-view within `manage_activities.html`: student list with status badges, remove student action
 
 **Done when**: Users can change their password and administrators can manage individual registrations.
 
@@ -175,7 +177,7 @@ The build is split into phases. Each phase produces something testable before th
 - [ ] All validation rules enforced and returning field-level errors
 - [ ] CSRF protection on all form routes
 - [ ] Session expiry redirect with `next_url`
-- [ ] Concurrent registration race condition confirmed working
+- [ ] Concurrent registration race condition confirmed working (row-level locking verified with concurrent test)
 
 ### Frontend
 
@@ -198,7 +200,7 @@ The build is split into phases. Each phase produces something testable before th
 
 **Goal**: The complete flow works end to end with realistic data.
 
-- [ ] Sample data script: 10–15 students, 3–4 activities in different states, some existing group history
+- [ ] Sample data script (`app/seed.py`): 10–15 students, 3–4 activities in different states, some existing group history. Note: the `testing/` directory contains a JavaScript seed file (`testing/src/seedData.js`) used for the prototype group formation tests. The Python seed script for the real app is separate and should be created fresh — it populates the actual PostgreSQL database, not the in-memory JS store.
 - [ ] Test the full student journey: login → browse → register → check status → view group
 - [ ] Test the full admin journey: create → publish → monitor → form groups → finalise
 - [ ] Test edge cases from the testing plan in `project-overview.md`
@@ -206,7 +208,9 @@ The build is split into phases. Each phase produces something testable before th
 
 ---
 
-## Phase 9 — File upload (deferred)
+## Appendix — Phase 9 (File upload, deferred)
+
+This phase is deferred and not part of the version 1 build. It is documented here for reference only.
 
 When this phase is started:
 

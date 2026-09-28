@@ -43,16 +43,19 @@ Full variable list: see `template-contract.md`.
 
 ### Who can withdraw and when
 
+The **formation cutoff** is the governing trigger for student self-withdrawal. The `groups_proposed` activity status is not the trigger — an administrator may propose groups before the cutoff, but students can still withdraw until the cutoff timestamp passes.
+
 | Activity state | Student can withdraw? | Notes |
 |---|---|---|
 | Open | Yes | Can re-register while registration is still open |
 | Registration closed, groups not yet proposed | Yes, until the formation cutoff | Cannot re-register |
-| Groups proposed (admin reviewing) | No | Message: "Groups are being finalised. Contact an administrator." |
+| Groups proposed, cutoff not yet passed | Yes — and doing so **discards the proposal** | The administrator must regenerate groups after the withdrawal |
+| Groups proposed, cutoff has passed | No | Message: "Groups are being finalised. Contact an administrator." |
 | Groups formed | No | Administrator handles it |
 | Cancelled | No | Registration is already marked cancelled |
 | Completed | No | Not applicable |
 
-The formation cutoff is the hard limit. After it has passed, students can no longer withdraw themselves.
+The formation cutoff is the hard limit. Once it has passed, students can no longer withdraw themselves regardless of whether groups have been proposed or finalised.
 
 ### What happens on withdrawal
 
@@ -65,11 +68,11 @@ The formation cutoff is the hard limit. After it has passed, students can no lon
 
 ### Withdrawal after groups are proposed or formed
 
-Students cannot do this themselves. An administrator removes the student from the Activity Registrations page. Then:
+Students cannot do this themselves once the formation cutoff has passed. An administrator removes the student from the Activity Registrations view within Manage Activities. Then:
 
-- If groups are only **proposed**: the proposal is discarded and must be regenerated.
+- If groups are only **proposed**: the proposal is discarded and must be regenerated. The administrator is shown a warning before confirming the removal. This applies whether or not the formation cutoff has passed.
 - If groups are **finalised**: the affected group is marked `awaiting_decision`. The administrator chooses how to resolve it.
-- The student's registration status becomes `withdrawn`.
+- In both cases, the student's registration status becomes `withdrawn`.
 
 ### Backend enforcement
 
@@ -122,6 +125,8 @@ An activity with registrations is cancelled, never deleted.
 
 Group size is locked once any registration exists. The **change group size** leftover option on the Group Formation page records a new size for this formation and re-runs the proposal. It does not edit the activity record.
 
+The temporary size is held in the **formation session**: a short-lived server-side record (or in-memory dict keyed by `activity_id`) that exists only while the formation workflow for that activity is in progress. It is discarded when the proposal is finalised or discarded. It is never written to the `activities` table. The group formation service reads this temporary size instead of `activities.group_size` when it is present.
+
 ### Enforcement
 
 - Locked fields are shown as read-only with a reason from `locked_reasons`.
@@ -145,7 +150,7 @@ Group size is locked once any registration exists. The **change group size** lef
 | User opens or navigates to a page | Redirect to login with: "Your session expired. Log in again." |
 | After login | Redirect to the page they wanted, using `next_url`. `next_url` must be an internal path only — no redirects to external sites. |
 | Form submitted after expiry | Submission is not processed. User goes to login, then back to the form page. Entered data is lost. |
-| Background page request after expiry | Response signals expiry. Page redirects to login instead of showing a broken section. |
+| Background page request after expiry | Because the app is server-rendered, there are no true background API calls during normal navigation. This row covers any JavaScript-initiated `fetch` requests (e.g. the theme toggle saving a preference, or a future polling scenario). If such a request detects an expired session (HTTP 401 response), the page should redirect to login rather than silently failing. |
 
 ### Long forms
 
@@ -289,10 +294,10 @@ An empty state names the space, explains it in one line, and offers the next ste
 ### Related states
 
 Every page also needs:
-- **Loading state**: a simple indicator while data loads.
-- **Error state**: a message and a retry option.
+- **Loading state**: a simple centred spinner or skeleton shown while the page is fetching data. Replaces the content area until data arrives. Never shows a blank or partially rendered page.
+- **Error state**: a message ("Something went wrong.") with a Retry button. Replaces the content area. Never shows a blank page. Uses the shared error state component.
 
-These use the shared loading indicator and error state components.
+These use the shared loading indicator and error state components defined in `frontend.md` section 8.
 
 ---
 
@@ -310,7 +315,7 @@ Resources store a `kind` field (`link` or `file`) from the start. Version 1 supp
 - An **Add link** button adds a row.
 - Completely blank rows are ignored on save.
 
-When file upload is added: remove the note, add an **Upload file** button beside **Add link**, using the same row layout.
+When file upload is added: the "File uploads aren't available yet" note is removed, and an Upload file button is added beside Add link using the same row layout. The tasks for this are tracked in `implementation-plan.md` Phase 9.
 
 ### Student Activity Details page — Resources card
 

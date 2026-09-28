@@ -141,7 +141,7 @@ These are tracked separately. A student can be successfully registered while the
 | `open` | Published and accepting registrations |
 | `full` | Capacity reached |
 | `registration_closed` | Deadline passed or closed manually; activity may still be upcoming |
-| `groups_proposed` | Administrator has reviewed but not yet finalised (admin-only visibility) |
+| `groups_proposed` | Administrator has reviewed but not yet finalised — **admin-only visibility; students never see this status** |
 | `groups_formed` | Groups have been finalised and are visible to students |
 | `cancelled` | Cancelled by the administrator |
 | `completed` | The activity has taken place |
@@ -211,7 +211,9 @@ These are tracked separately. A student can be successfully registered while the
 - Capacity counts only registrations with status `registered`. Withdrawn and cancelled registrations do not count.
 - The capacity check and save happen as one operation to prevent two students taking the last place simultaneously.
 - After registering, the student sees a confirmation that clearly states whether a group has been assigned.
-- Withdrawal is allowed until the formation cutoff. After the cutoff, an administrator handles it.
+- Withdrawal is allowed until the **formation cutoff**. The formation cutoff is the governing rule — not the `groups_proposed` status. An administrator may propose groups before the cutoff, but students can still withdraw until the cutoff passes.
+- After the cutoff, students can no longer withdraw themselves; an administrator handles it.
+- If a student withdraws while groups are in the `groups_proposed` state (proposal not yet finalised), the proposal is discarded and must be regenerated after the cutoff passes or the administrator chooses to re-run formation.
 - If a student withdraws and the activity was full, it returns to `open` if otherwise open.
 - A withdrawn student may re-register if registration is still open. That updates the existing registration record back to `registered`.
 
@@ -262,7 +264,7 @@ All three options must be resolved before finalisation is allowed.
 5. Previous collaboration is a soft constraint. It must never stop groups from being formed.
 6. No student is left without a clear status.
 
-### Algorithm
+### Algorithm — shuffle-and-greedy
 
 1. Build a record of previous pairs from group history.
 2. Shuffle the eligible students so results are not always the same.
@@ -270,7 +272,7 @@ All three options must be resolved before finalisation is allowed.
 4. Repeat until no complete group can be made.
 5. Report any remaining students as leftovers.
 
-Score a candidate group by counting how many pairs inside it have worked together before. Prefer the lowest count. The exact scoring implementation can be refined without changing the rest of the system, as long as it lives in its own function.
+Score a candidate group by counting how many pairs inside it have worked together before. Prefer the lowest count. The exact scoring implementation can be refined without changing the rest of the system, as long as it lives in its own function (`app/services/group_formation.py`).
 
 ### Saving groups safely
 
@@ -353,8 +355,8 @@ An activity can be cancelled at any point before completion.
 | Saving groups fails | Nothing saved, no student shown as assigned |
 | Activity cancelled after registrations | Registrations marked cancelled, students see the status |
 | Administrator edits group size after registration | Field is locked |
-| Student withdraws before formation | Removed from the eligible list |
-| Student withdraws after formation is proposed | Proposal is discarded and must be regenerated |
+| Student withdraws before formation cutoff | Removed from the eligible list; if groups were already proposed, the proposal is discarded and must be regenerated |
+| Student withdraws after formation cutoff | Administrator removes from registrations page; if groups are proposed, proposal is discarded; if groups are finalised, affected group is marked awaiting decision |
 | Student withdraws after groups are finalised | Administrator removes from registrations page; affected group marked awaiting decision |
 | Session expires | User redirected to login with "Your session expired. Log in again." Then returned to the page they wanted. |
 | CSRF token missing or invalid | Form not processed; message: "That form expired. Reload the page and try again." |
@@ -383,6 +385,10 @@ An activity can be cancelled at any point before completion.
 - Responsive layouts on different screen sizes.
 - Session expiry redirect and return-to-page behaviour.
 - CSRF protection on all forms.
+- Password change: current password required, new passwords must match, minimum length enforced.
+- Password change ends all other active sessions for that user.
+- Three-way theme control on profile page (System / Light / Dark).
+- CSRF token rejection: form shows "That form expired. Reload the page and try again."
 
 ### Sample scenarios
 
