@@ -30,9 +30,7 @@
         <strong>{{ item.activity_title }}</strong> —
         {{ item.starts_at | datetimeformat }}
         &nbsp;
-        {% include "partials/badge.html" with context %}
-        {# group_status badge #}
-        {% set status_key = item.group_status %}
+        {% set group_status = item.group_status %}
         {% include "partials/group_status_badge.html" with context %}
       </span>
       <a href="{{ url_for('student.activity_detail', activity_id=item.activity_id) }}" class="btn btn-sm btn-secondary">View</a>

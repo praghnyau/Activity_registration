@@ -1,0 +1,28 @@
+# Local fake backend — never commit
+dev/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Environment secrets
+.env
+
+# Alembic
+*.pyc
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Amazon Q
+q/
+q.zip
