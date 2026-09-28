@@ -3,47 +3,58 @@
 {% block page_title %}Admin Dashboard{% endblock %}
 
 {% block content %}
-<h1 class="mb-2">Welcome, {{ current_user.name }}</h1>
+<h1 class="mb-3">Welcome, {{ current_user.name }}</h1>
 
 {# Stats #}
-<div class="stat-grid">
+<div class="stat-grid mb-3">
   <div class="stat-card">
     <div class="stat-value">{{ stats.total_activities }}</div>
     <div class="stat-label">Total Activities</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value">{{ stats.open_activities_count }}</div>
+    <div class="stat-value">{{ stats.open_activities }}</div>
     <div class="stat-label">Open for Registration</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value">{{ stats.total_registrations_count }}</div>
+    <div class="stat-value">{{ stats.total_registrations }}</div>
     <div class="stat-label">Total Registrations</div>
   </div>
   <div class="stat-card">
-    <div class="stat-value">{{ stats.pending_group_formation_count }}</div>
+    <div class="stat-value">{{ stats.awaiting_formation_count }}</div>
     <div class="stat-label">Awaiting Group Formation</div>
   </div>
+  {% if stats.unresolved_count %}
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.unresolved_count }}</div>
+    <div class="stat-label">Unresolved Cases</div>
+  </div>
+  {% endif %}
 </div>
 
 {# Attention items #}
 {% if attention_items %}
-  <div class="section-title mt-3">Needs Your Attention</div>
+  <div class="section-title mt-3 mb-1">Needs Your Attention</div>
   {% for item in attention_items %}
-    <div class="attention-box">
+    <div class="attention-box mb-1">
       <span>
         <strong>{{ item.activity_title }}</strong> —
-        Registration deadline passed {{ item.registration_deadline | datetimeformat }},
-        {{ item.registered_count }} students registered
+        {{ item.registered_count }} students registered ·
+        Deadline: {{ item.registration_deadline | datetimeformat }}
       </span>
-      <a href="{{ url_for('admin.group_formation') }}?activity_id={{ item.activity_id }}" class="btn btn-sm btn-primary">Form Groups</a>
+      <a href="{{ url_for('admin.group_formation') }}?activity_id={{ item.activity_id }}"
+         class="btn btn-sm btn-primary">Form Groups</a>
     </div>
   {% endfor %}
+{% else %}
+  <div class="attention-box mb-1" style="background:var(--status-success-bg);color:var(--status-success-text);">
+    Nothing needs your attention right now.
+  </div>
 {% endif %}
 
-{# Recent / upcoming activities #}
-<div class="section-title mt-3">Recent Activities</div>
+{# Recent activities #}
+<div class="section-title mt-3 mb-1">Recent Activities</div>
 {% if recent_activities %}
-  <div class="table-wrap">
+  <div class="table-wrap mb-3">
     <table>
       <thead>
         <tr>
@@ -52,7 +63,7 @@
           <th>Starts</th>
           <th>Registrations</th>
           <th>Deadline</th>
-          <th></th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -64,7 +75,12 @@
             <td>{{ activity.registered_count }}{% if activity.capacity %} / {{ activity.capacity }}{% endif %}</td>
             <td>{{ activity.registration_deadline | datetimeformat }}</td>
             <td>
-              <a href="{{ url_for('admin.activity_form') }}?activity_id={{ activity.id }}" class="btn btn-secondary btn-sm">Edit</a>
+              <div class="flex gap-1">
+                <a href="{{ url_for('admin.manage_activities') }}?activity_id={{ activity.id }}"
+                   class="btn btn-secondary btn-sm">View</a>
+                <a href="{{ url_for('admin.activity_form') }}?activity_id={{ activity.id }}"
+                   class="btn btn-secondary btn-sm">Edit</a>
+              </div>
             </td>
           </tr>
         {% endfor %}
@@ -72,15 +88,15 @@
     </table>
   </div>
 {% else %}
-  <div class="empty-state">
+  <div class="empty-state mb-3">
     <div class="empty-state-title">No activities yet.</div>
-    <div class="empty-state-body">Create your first activity to get started.</div>
+    <div class="empty-state-body">Create your first activity to start collecting registrations.</div>
     <a href="{{ url_for('admin.activity_form') }}" class="btn btn-primary">Create Activity</a>
   </div>
 {% endif %}
 
 {# Quick links #}
-<div class="section-title mt-3">Quick Links</div>
+<div class="section-title mt-2 mb-1">Quick Links</div>
 <div class="quick-links">
   <a href="{{ url_for('admin.activity_form') }}" class="btn btn-secondary">➕ Create Activity</a>
   <a href="{{ url_for('admin.manage_activities') }}" class="btn btn-secondary">⚙️ Manage Activities</a>
