@@ -8,6 +8,117 @@
   <a href="{{ url_for('admin.activity_form') }}" class="btn btn-primary">➕ Create Activity</a>
 </div>
 
+{# ── Registrations sub-view ────────────────────────────────────────────────
+   Rendered instead of the activity list when the administrator inspects one
+   activity's registrations. See docs/template-contract.md.                 #}
+{% if sub_view == 'registrations' and rows is defined %}
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href="{{ url_for('admin.manage_activities') }}">← All activities</a>
+  </nav>
+
+  <section class="card" aria-labelledby="regs-heading">
+    <div class="card-title" id="regs-heading">Registrations — {{ activity.title }}</div>
+    <div class="card-meta">
+      {% set _map = {
+        'draft': ('closed', 'Draft'), 'open': ('open', 'Open'),
+        'full': ('pending', 'Full'), 'registration_closed': ('pending', 'Registration Closed'),
+        'groups_proposed': ('pending', 'Groups Proposed'),
+        'groups_formed': ('success', 'Groups Formed'),
+        'cancelled': ('closed', 'Cancelled'), 'completed': ('closed', 'Completed'),
+      } %}
+      {% set _st = _map.get(activity.display_status, ('closed', activity.display_status)) %}
+      <span class="badge badge-{{ _st[0] }}">{{ _st[1] }}</span>
+      <span>{{ activity.registered_count }}{% if activity.capacity %} / {{ activity.capacity }}{% endif %} registered</span>
+    </div>
+
+    {% if can_remove_student %}
+      <p class="form-help">
+        Removing a student deletes their registration but keeps the group record as an audit
+        trail. If groups are still a proposal, removing anyone discards the proposal and it must
+        be formed again.
+      </p>
+    {% endif %}
+
+    {% if rows %}
+      <div class="table-wrap">
+        <table class="table">
+          <caption class="sr-only">Registrations for {{ activity.title }}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Student</th>
+              <th scope="col">College email</th>
+              <th scope="col">Registered</th>
+              <th scope="col">Status</th>
+              <th scope="col">Group</th>
+              {% if can_remove_student %}<th scope="col"><span class="sr-only">Actions</span></th>{% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+              <tr>
+                <td>{{ row.student_name }}</td>
+                <td>{{ row.student_email }}</td>
+                <td>{{ row.registered_at.strftime('%d %b %Y, %I:%M %p') if row.registered_at else '—' }}</td>
+                <td>
+                  {% set _rstat = {'registered': 'Registered', 'cancelled': 'Cancelled',
+                                   'withdrawn': 'Withdrawn'}.get(row.registration_status, row.registration_status) %}
+                  <span class="badge badge-{{ 'success' if row.registration_status == 'registered' else 'closed' }}">{{ _rstat }}</span>
+                </td>
+                <td>
+                  {% if row.group_label %}
+                    <span class="group-label">{{ row.group_label }}</span>
+                    {% set group_status = row.group_status %}
+                    {% include "partials/group_status_badge.html" %}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                {% if can_remove_student %}
+                  <td>
+                    {% if row.registration_status == 'registered' %}
+                      <button type="button" class="btn btn-danger btn-sm" data-dialog-open="remove-reg-{{ row.registration_id }}">
+                        Remove
+                      </button>
+                      <div class="dialog" id="remove-reg-{{ row.registration_id }}" role="dialog" aria-modal="true" aria-labelledby="remove-reg-{{ row.registration_id }}-title" {% if loop.index0 > 0 %}hidden{% endif %}>
+                        <div class="dialog-body">
+                          <h2 class="dialog-title" id="remove-reg-{{ row.registration_id }}-title">Remove {{ row.student_name }}?</h2>
+                          <p class="dialog-text">
+                            This deletes their registration for <strong>{{ activity.title }}</strong>.
+                            It cannot be undone.
+                            {% if row.group_label %}
+                              They are currently in <strong>{{ row.group_label }}</strong>; the group
+                              record is kept, but the remaining members will be flagged
+                              <em>Awaiting Admin Decision</em>.
+                            {% endif %}
+                          </p>
+                          <div class="dialog-actions">
+                            <button class="btn btn-secondary" data-dialog-cancel>Keep Student</button>
+                            <form method="post" action="{{ url_for('admin.remove_registration', registration_id=row.registration_id) }}" style="display:inline;">
+                              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                              <button type="submit" class="btn btn-danger">Remove Student</button>
+                            </form>
+                          </div>
+                        </div>
+                      </div>
+                    {% else %}
+                      <span class="text-muted">—</span>
+                    {% endif %}
+                  </td>
+                {% endif %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="empty-state">
+        <div class="empty-state-title">No one has registered yet.</div>
+        <div class="empty-state-body">Registrations will appear here as students sign up.</div>
+      </div>
+    {% endif %}
+  </section>
+{% else %}
+
 {# Filters #}
 <form method="get" class="filter-bar" aria-label="Filter activities">
   <div>
@@ -126,5 +237,6 @@
     <div class="empty-state-body">Create your first activity to get started.</div>
     <a href="{{ url_for('admin.activity_form') }}" class="btn btn-primary">Create Activity</a>
   </div>
+{% endif %}
 {% endif %}
 {% endblock %}

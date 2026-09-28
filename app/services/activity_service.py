@@ -8,6 +8,7 @@ Responsibilities:
 - Registration count queries
 - Activity listing for admin and students
 """
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -409,4 +410,134 @@ async def list_activities_student(
     return {
         "activities": activities,
         "pagination": {"page": page, "total_pages": total_pages, "total": total},
+    }
+
+
+# ── Admin registrations view (Phase 6) ───────────────────────────────────────
+
+@dataclass
+class RegistrationRow:
+    """One row of the admin Activity Registrations sub-view."""
+
+    registration_id: int
+    student_name: str
+    student_email: str
+    registered_at: datetime
+    registration_status: str
+    group_status: str
+    group_label: str | None = None
+
+
+async def list_activity_registrations(db: AsyncSession, activity_id: int) -> dict:
+    """
+    Every registration for an activity, with the student's group assignment.
+
+    Rows carry the group status the same way student-facing views do, so the
+    admin sees `awaiting_decision` for a finalised group that lost a member.
+    """
+    from app.services import group_service as group_svc
+
+    activity = await db.get(Activity, activity_id)
+    if activity is None:
+        return {"activity": None, "rows": [], "can_remove_student": False}
+
+    rows = await db.execute(
+        select(Registration, User)
+        .join(User, User.id == Registration.student_id)
+        .where(Registration.activity_id == activity_id)
+        .order_by(User.name)
+    )
+
+    entries = []
+    registered_count = 0
+    for registration, student in rows.all():
+        group_status, group_label = await group_svc.group_status_for_registration(db, registration)
+        if registration.status == RegistrationStatus.registered:
+            registered_count += 1
+        entries.append(
+            RegistrationRow(
+                registration_id=registration.id,
+                student_name=student.name,
+                student_email=student.email,
+                registered_at=registration.registered_at,
+                registration_status=registration.status.value,
+                group_status=group_status,
+                group_label=group_label,
+            )
+        )
+
+    activity.display_status = activity.status.value
+    activity.registered_count = registered_count
+
+    # Removal is an administrator action available once registration has closed;
+    # while the activity is still open the student can withdraw themselves.
+    can_remove = activity.status not in (
+        ActivityStatus.draft,
+        ActivityStatus.open,
+        ActivityStatus.full,
+    )
+
+    return {"activity": activity, "rows": entries, "can_remove_student": can_remove}
+
+
+CLOSED_STATUSES = (
+    ActivityStatus.registration_closed,
+    ActivityStatus.cancelled,
+    ActivityStatus.completed,
+)
+
+
+async def list_closed_activities(
+    db: AsyncSession,
+    q: str = "",
+    date_from: str = "",
+    closure_reason: str = "",
+    page: int = 1,
+    page_size: int = 12,
+) -> dict:
+    """
+    The student-facing archive: activities no longer open for registration.
+
+    `closure_reason` is the activity status restricted to the three closable
+    values, which is what `closed_activities.html` resolves through its own
+    `closure_labels` map. Unknown values are ignored rather than raising, so a
+    stale bookmark cannot 500 the page.
+    """
+    page = max(1, page)
+    page_size = max(1, min(page_size, 100))
+
+    query = select(Activity).where(Activity.status.in_(CLOSED_STATUSES))
+
+    if q.strip():
+        query = query.where(Activity.title.ilike(f"%{q.strip()}%"))
+    if date_from:
+        dt = _parse_dt(date_from)
+        if dt:
+            query = query.where(Activity.starts_at >= dt)
+    if closure_reason in {s.value for s in CLOSED_STATUSES}:
+        query = query.where(Activity.status == ActivityStatus(closure_reason))
+
+    count_query = select(func.count()).select_from(query.subquery())
+    total = (await db.execute(count_query)).scalar() or 0
+
+    rows = await db.execute(
+        query.order_by(Activity.starts_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    activities = list(rows.scalars().all())
+
+    for a in activities:
+        a.display_status = a.status.value
+        a.closure_reason = a.status.value
+
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    return {
+        "activities": activities,
+        "pagination": {
+            "page": page,
+            "total_pages": total_pages,
+            "total": total,
+            "total_items": total,
+        },
     }

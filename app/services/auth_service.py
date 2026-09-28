@@ -1,7 +1,10 @@
 import re
 from passlib.context import CryptContext
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.config import settings
+from app.models.user import User
 
 ADMIN_EMAIL = "dantubhavyasree@gmail.com"
 _STUDENT_EMAIL_PATTERN = re.compile(r"^[a-z0-9]+@bvrithyderabad\.edu\.in$", re.IGNORECASE)
@@ -35,6 +38,54 @@ def hash_password(plain: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
+
+
+PASSWORD_MIN_LENGTH = 8
+
+
+async def change_password(
+    db: AsyncSession,
+    user: User,
+    current_password: str,
+    new_password: str,
+    confirm_password: str,
+) -> tuple[bool, dict[str, str], int | None]:
+    """
+    Change a user's own password.
+
+    Returns `(ok, field_errors, new_session_version)`. `field_errors` is empty
+    on success. Bumping the session version ends the user's other sessions;
+    the caller must copy the returned version into the current cookie so the
+    session making the change survives.
+    """
+    errors: dict[str, str] = {}
+
+    if not current_password:
+        errors["current_password"] = "Enter your current password."
+    elif not verify_password(current_password, user.password_hash):
+        errors["current_password"] = "That is not your current password."
+
+    if not new_password:
+        errors["new_password"] = "Enter a new password."
+    elif len(new_password) < PASSWORD_MIN_LENGTH:
+        errors["new_password"] = f"Use at least {PASSWORD_MIN_LENGTH} characters."
+
+    if not confirm_password:
+        errors["confirm_password"] = "Re-enter your new password."
+    elif new_password and new_password != confirm_password:
+        errors["confirm_password"] = "The two passwords do not match."
+
+    if errors:
+        return False, errors, None
+
+    if verify_password(new_password, user.password_hash):
+        return False, {"new_password": "Choose a password you have not used before."}, None
+
+    new_version = user.session_version + 1
+    user.password_hash = hash_password(new_password)
+    user.session_version = new_version
+    await db.commit()
+    return True, {}, new_version
 
 
 def generate_csrf_token(session_id: str) -> str:

@@ -13,7 +13,7 @@ Stack: **Python, FastAPI, Jinja2 server-rendered templates, PostgreSQL, session 
 | # | Topic | Decision |
 |---|---|---|
 | 1 | Template contract | Backend passes precomputed data and permission flags. Templates contain no business logic. |
-| 2 | Withdrawal | Allowed until the formation cutoff. Afterwards, an administrator handles it. |
+| 2 | Withdrawal | Allowed only inside the open window: activity status is `open` and the deadline has not passed. Close registration freezes withdrawal; reopen restores it. |
 | 3 | Edit limits | Fields lock progressively as the activity moves through its lifecycle. |
 | 4 | Session expiry | 60 minutes idle, 8 hours absolute. Redirect to login with a message, then return to the page. |
 | 5 | Dark mode | Stored in browser `localStorage`, applied before the page paints. Defaults to device setting. |
@@ -22,6 +22,7 @@ Stack: **Python, FastAPI, Jinja2 server-rendered templates, PostgreSQL, session 
 | 8 | Forgot password | Out of version 1. Login page tells users to contact an administrator. Change password on profile is in. |
 | 9 | Empty states | Defined per page — see section 9. |
 | 10 | File upload placeholder | Version 1 supports resource links only. File upload arrives later in the same UI slot. |
+| 11 | Leftover handling | Left to the administrator. Two options only: add leftovers to existing groups, or make a new group from them. No leave-pending, no change-group-size. |
 
 ---
 
@@ -39,23 +40,44 @@ Full variable list: see `template-contract.md`.
 
 ---
 
-## 2. Withdrawal rules
+## 2. Registration window, withdrawal, and close/reopen
 
-### Who can withdraw and when
+### The open window
 
-The **formation cutoff** is the governing trigger for student self-withdrawal. The `groups_proposed` activity status is not the trigger — an administrator may propose groups before the cutoff, but students can still withdraw until the cutoff timestamp passes.
+There is a single window during which students may both register and withdraw. It is open only when **both** conditions hold:
 
-| Activity state | Student can withdraw? | Notes |
-|---|---|---|
-| Open | Yes | Can re-register while registration is still open |
-| Registration closed, groups not yet proposed | Yes, until the formation cutoff | Cannot re-register |
-| Groups proposed, cutoff not yet passed | Yes — and doing so **discards the proposal** | The administrator must regenerate groups after the withdrawal |
-| Groups proposed, cutoff has passed | No | Message: "Groups are being finalised. Contact an administrator." |
-| Groups formed | No | Administrator handles it |
-| Cancelled | No | Registration is already marked cancelled |
-| Completed | No | Not applicable |
+1. The activity status is `open` (or `full`, which still permits withdrawal), and
+2. The current time is before `registration_deadline`.
 
-The formation cutoff is the hard limit. Once it has passed, students can no longer withdraw themselves regardless of whether groups have been proposed or finalised.
+Call this the **open window**. Registering, withdrawing, and re-registering are all permitted inside it and all blocked outside it. There is no separate withdrawal rule — the same two conditions govern all three actions.
+
+### Why closing registration also freezes withdrawal
+
+**Close registration** locks the roster. Only the students already registered at that moment take part. Because the participant list is fixed from that point, no student may remove themselves afterwards.
+
+This makes close/reopen meaningful:
+
+- **Close registration** — the roster freezes. New registrations blocked, withdrawals blocked. The administrator can now run group formation against a fixed list.
+- **Reopen registration** — the roster unfreezes. Inside the open window, students may once again register, withdraw, or re-register.
+
+Reopening is only permitted while the deadline has not passed, so reopening never resurrects a lapsed window.
+
+### Action matrix
+
+| Activity state | Deadline | Register | Withdraw |
+|---|---|---|---|
+| Draft | any | No — not visible to students | No |
+| Open | not passed | Yes | Yes |
+| Open | passed | No | No |
+| Full | not passed | No — activity is full | Yes — frees a slot |
+| Registration closed | not passed | No | No |
+| Registration closed | passed | No | No |
+| Groups proposed | any | No | No — administrator removes |
+| Groups formed | any | No | No — administrator removes |
+| Cancelled | any | No | No — registration already `cancelled` |
+| Completed | any | No | No |
+
+The formation cutoff still exists as a field, but it governs when group formation is finalised. It has no role in registration or withdrawal.
 
 ### What happens on withdrawal
 
@@ -64,21 +86,22 @@ The formation cutoff is the hard limit. Once it has passed, students can no long
 3. The student is excluded from group formation and from group history calculations.
 4. The registration count drops, which may return a full activity to `open`.
 5. My Registrations continues to show the entry with status `withdrawn`.
-6. If registration is still open, the student may re-register. The existing record is updated back to `registered`.
+6. The student may re-register only while the open window is still open. The existing record is updated back to `registered` rather than a new row being inserted.
 
-### Withdrawal after groups are proposed or formed
+### Administrator removal once the window is closed
 
-Students cannot do this themselves once the formation cutoff has passed. An administrator removes the student from the Activity Registrations view within Manage Activities. Then:
+Self-withdrawal is unavailable as soon as registration is closed, which always happens before group formation. So a student can never withdraw while groups are proposed or formed. Removal at that point is an administrator action from the Activity Registrations view within Manage Activities. Then:
 
-- If groups are only **proposed**: the proposal is discarded and must be regenerated. The administrator is shown a warning before confirming the removal. This applies whether or not the formation cutoff has passed.
+- If groups are only **proposed**: the proposal is discarded and must be regenerated. The administrator is shown a warning before confirming the removal.
 - If groups are **finalised**: the affected group is marked `awaiting_decision`. The administrator chooses how to resolve it.
 - In both cases, the student's registration status becomes `withdrawn`.
 
 ### Backend enforcement
 
 - Only the owner of a registration can withdraw it.
-- Withdrawal checks the current state at the moment of the request, not what the page showed earlier.
+- Withdrawal checks the current status and deadline at the moment of the request, not what the page showed earlier.
 - A repeated withdrawal request on an already-withdrawn registration does nothing.
+- Status and deadline are both compared on the server on every request. Hiding the buttons in the template is a usability measure only and is never the enforcement.
 
 ---
 
@@ -110,22 +133,33 @@ The more the system has committed to, the less can change. Anything that would i
 | Action | Allowed when |
 |---|---|
 | Publish | Draft, with all required fields valid |
-| Close registration | Open |
-| Reopen registration | Registration closed, groups not yet proposed, deadline and cutoff still valid |
+| Close registration | Open or Full. Freezes the roster — blocks new registrations and withdrawals |
+| Reopen registration | Registration closed, groups not yet proposed, and the registration deadline has not passed |
 | Start group formation | Registration closed or after deadline has passed |
 | Discard proposal | Groups proposed |
-| Finalise groups | Groups proposed, and all leftover students have a resolution |
+| Finalise groups | Groups proposed, and one of the two leftover options has been applied |
 | Cancel | Any state before completed |
 | Mark completed | After the activity's start time has passed |
 | Delete | Draft only, or an activity with no registrations |
 
 An activity with registrations is cancelled, never deleted.
 
-### Group size change workaround
+### Leftover handling
 
-Group size is locked once any registration exists. The **change group size** leftover option on the Group Formation page records a new size for this formation and re-runs the proposal. It does not edit the activity record.
+Leftover students are never resolved automatically. The system proposes the complete groups, flags the remainder, and blocks finalisation until the administrator picks one of two options:
 
-The temporary size is held in the **formation session**: a short-lived server-side record (or in-memory dict keyed by `activity_id`) that exists only while the formation workflow for that activity is in progress. It is discarded when the proposal is finalised or discarded. It is never written to the `activities` table. The group formation service reads this temporary size instead of `activities.group_size` when it is present.
+| Option | Effect |
+|---|---|
+| Add to existing groups | Leftovers are distributed among the already-proposed groups, making them larger than the required size |
+| Create a new group from the leftovers | All leftovers go into one additional group, smaller than the required size |
+
+Both options place every leftover student, so there is no `awaiting_decision` state during formation. `awaiting_decision` exists only for the separate case of a finalised group disrupted by an administrator removing a student (see section 2).
+
+**Availability.** "Add to existing groups" requires at least one complete proposed group. If the eligible students do not fill even one group, that option is not offered and the new-group option is the only way forward.
+
+There is no "change group size for this formation" option, and no formation session is needed. Group size is a plain activity field edited under the normal edit limits, and the leftover options never write to it. A group ending up larger or smaller than the required size is an expected outcome, not an error.
+
+Finalise groups is enabled only once one of the two options has been applied and no leftover student is unplaced.
 
 ### Enforcement
 
@@ -162,6 +196,18 @@ The Create Activity form can take time. Mitigation:
 
 - The CSRF token has the same lifetime as the session. A missing or invalid token shows: "That form expired. Reload the page and try again."
 - If an administrator's role changes while logged in, the change takes effect on the next request. Role is read from the database each time, not trusted from the cookie.
+- **Ending other sessions on password change.** Every user carries a `session_version` (an integer,
+  default `1`). Login stamps the current value into the signed cookie, and each request compares the
+  cookie against the database; a mismatch ends the session. Changing a password increments the value,
+  which invalidates every cookie issued before the change. The response that performs the change
+  re-stamps the current session's cookie, so the user stays logged in on the device they are using
+  while every other device is logged out.
+- **Legacy cookies are tolerated.** A cookie with no `session_version` at all is accepted rather than
+  rejected, so deploying the change does not sign out every existing session at once. The trade-off is
+  that a session created before the change can never be invalidated by a later password change, because
+  there is no version in the cookie to compare. Requiring the key closes that hole at the cost of a
+  forced global logout on deploy. Revisit once sessions are short-lived enough that this stops
+  mattering.
 
 ---
 
@@ -224,7 +270,7 @@ Version 1 has no waitlist. A full activity shows "Full". The `waitlisted` status
 
 **Future waitlist rules (not implemented)**:
 1. First in, first out by registration time.
-2. When a registered student withdraws before the formation cutoff, the first waitlisted student is promoted automatically.
+2. When a registered student withdraws inside the open window, the first waitlisted student is promoted automatically.
 3. Waitlisted students are excluded from group formation until promoted.
 4. Administrators can see the waitlist on the registrations page.
 5. Students see "Waitlisted" and their position.
@@ -287,7 +333,7 @@ An empty state names the space, explains it in one line, and offers the next ste
 | Manage Activities | Filter returns nothing | "No activities match your filters." | Clear filters |
 | Activity Registrations | No registrations | "No students have registered yet." | None |
 | Group Formation | No eligible students | "There are no eligible registrations to group." | Back to registrations |
-| Group Formation | Fewer students than one group | "Not enough students for one complete group." Show count and group size. Show leftover options. | Leftover options |
+| Group Formation | Fewer students than one group | "Not enough students for one complete group." Show count and group size. Show the two leftover options. | Leftover options |
 | Group Formation | Not started | "Groups haven't been formed for this activity." | Start group formation button |
 | Group History | None | "No group history yet." Body: "Finalised groups will appear here." | None |
 
@@ -335,3 +381,54 @@ Required additions:
 - A storage location outside the public web directory.
 - A download route that checks the user is permitted to access the activity.
 - Safe file names (uploaded file names cannot be used to traverse the filesystem).
+
+---
+
+## 11. Administrator removal of a student
+
+An administrator can remove a student from an activity's registrations. This was built in Phase 6 and
+introduced several decisions that the earlier phases had not settled.
+
+### The registration is withdrawn, never deleted
+
+Removing a student sets `Registration.status = 'withdrawn'`. The row is kept so the audit trail shows
+what happened, and so the student can be re-registered later without a second insert.
+
+### What happens to the groups depends on when the removal happens
+
+| Activity state at removal | Effect |
+|---|---|
+| `draft` / `open` | Registration is withdrawn. Nothing else changes. |
+| `groups_proposed` | The whole proposal is **discarded** and the activity returns to `registration_closed`. It must be formed again from scratch. |
+| `groups_formed` | The group is **kept intact**, including the removed student's `GroupMember` row. The remaining members are flagged `Awaiting Admin Decision`. |
+
+Resetting the activity status when a proposal is discarded is not optional. Without it the activity
+sits in `groups_proposed` with no groups left, and because formation only runs from
+`registration_closed` there is no way back to a valid state without editing the database.
+
+### `awaiting_decision` is derived, not stored
+
+`GroupStatus` has no `awaiting_decision` member and none was added. A group counts as disrupted when
+any of its members has a registration that is no longer `registered`; that check is what produces the
+student-facing state.
+
+The two states this produces are deliberately asymmetric:
+
+- The **removed student** derives `no_group` and no longer sees the group at all. They have no
+  registration, so there is nothing to show them.
+- The **remaining students** keep their group and see `Awaiting Admin Decision`.
+
+Group membership rows are never deleted, so the group still lists correctly and the history is intact.
+
+### Open: what resolves `awaiting_decision`
+
+The design states the state but not the way out of it. No route, service function, or UI exists for
+any of the plausible resolutions:
+
+- dissolve the group and re-form everyone,
+- replace just the removed student,
+- accept the shrunken group as final,
+- or anything else.
+
+This is intentionally left unimplemented rather than guessed at. It needs a product decision before
+Phase 7 can treat this state as handled.

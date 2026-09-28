@@ -85,7 +85,7 @@ Can:
 - Search and filter activities.
 - View activity details and download resources.
 - Register for open activities.
-- Withdraw from an activity (before the formation cutoff).
+- Withdraw from an activity (while registration is open and the deadline has not passed).
 - View their registrations and statuses.
 - View their assigned groups and members.
 - Browse closed, cancelled, and completed activities.
@@ -164,7 +164,7 @@ These are tracked separately. A student can be successfully registered while the
 |---|---|
 | `not_yet_formed` | Group formation has not happened |
 | `group_formed` | Members are assigned and saved |
-| `awaiting_decision` | The number of students does not fit the required group size and needs an administrator decision |
+| `awaiting_decision` | A finalised group was disrupted by an administrator removing a student, and needs a decision |
 | `no_group` | The student was not placed in a group |
 
 ---
@@ -187,8 +187,8 @@ These are tracked separately. A student can be successfully registered while the
 - Create an activity with all required details.
 - Save as a draft and publish only when required information is complete.
 - Edit an activity, with fields locking progressively as the activity moves through its lifecycle (see design-decisions.md section 3).
-- Close registration early.
-- Reopen registration if groups have not yet been proposed and the deadline still makes sense.
+- Close registration early. This freezes the roster: only students already registered take part, and no one may withdraw afterwards.
+- Reopen registration if groups have not yet been proposed and the deadline has not passed. Students then once again have the option to register or withdraw.
 - Cancel an activity at any point before completion.
 - Mark an activity as completed after its start time has passed.
 - Delete an activity only if it is a draft or has no registrations.
@@ -211,11 +211,12 @@ These are tracked separately. A student can be successfully registered while the
 - Capacity counts only registrations with status `registered`. Withdrawn and cancelled registrations do not count.
 - The capacity check and save happen as one operation to prevent two students taking the last place simultaneously.
 - After registering, the student sees a confirmation that clearly states whether a group has been assigned.
-- Withdrawal is allowed until the **formation cutoff**. The formation cutoff is the governing rule — not the `groups_proposed` status. An administrator may propose groups before the cutoff, but students can still withdraw until the cutoff passes.
-- After the cutoff, students can no longer withdraw themselves; an administrator handles it.
-- If a student withdraws while groups are in the `groups_proposed` state (proposal not yet finalised), the proposal is discarded and must be regenerated after the cutoff passes or the administrator chooses to re-run formation.
+- Registering, withdrawing, and re-registering are all permitted inside one **open window**, which requires both that the activity is open (or full) and that the registration deadline has not passed. All three are blocked outside it. There is no separate withdrawal rule.
+- **Closing registration freezes the roster.** Only students registered at that moment take part, and withdrawals are blocked from that point.
+- **Reopening registration restores the window.** Provided groups have not been proposed and the deadline has not passed, students once again have the option to register or withdraw.
+- Because registration always closes before group formation, a student can never withdraw while groups are proposed or formed. Discarding a proposal on withdrawal is only relevant to the administrator removal path.
 - If a student withdraws and the activity was full, it returns to `open` if otherwise open.
-- A withdrawn student may re-register if registration is still open. That updates the existing registration record back to `registered`.
+- A withdrawn student may re-register only while the open window is still open. That updates the existing registration record back to `registered`.
 
 ### Group formation
 
@@ -230,13 +231,23 @@ These are tracked separately. A student can be successfully registered while the
 
 ### Leftover handling
 
-When registrations are not divisible by the group size, the administrator chooses one of:
+When registrations are not divisible by the group size, the leftover students are left entirely to the administrator. The system proposes the complete groups and flags the remainder; it never resolves them on its own.
 
-1. **Leave pending** — sets affected students to `awaiting_decision`. Default safe option.
-2. **Allow a smaller group** — adds leftover students to an existing group as a smaller group.
-3. **Change group size for this formation** — records a new size and re-runs the proposal. Does not edit the activity form.
+The administrator chooses one of exactly two options:
 
-All three options must be resolved before finalisation is allowed.
+1. **Add to existing groups** — distributes the leftover students among the groups that were already proposed, making those groups larger than the required size.
+2. **Create a new group from the leftovers** — puts all leftover students together in one additional group, which is smaller than the required size.
+
+Both options place every leftover student, so no student is ever left without a group. There is no "leave pending" option and no `awaiting_decision` state during formation — finalisation is blocked until the administrator picks one of the two options.
+
+Neither option edits the activity's `group_size`. A group may end up larger or smaller than the required size, and that is expected.
+
+**Example.** 11 students registered, group size 3. The system proposes 3 complete groups of 3 and flags 2 leftover students. The administrator then either:
+
+- puts both leftovers together into a new fourth group (sizes 3, 3, 3, 2), or
+- adds one leftover to two of the existing groups (sizes 4, 4, 3).
+
+**Not included.** Changing the group size for the formation, closing or reopening registration, and leaving students unassigned are not leftover options. Group size is edited on the activity form under the normal edit limits, not from the formation screen.
 
 ### Group history
 
@@ -350,14 +361,16 @@ An activity can be cancelled at any point before completion.
 | Duplicate registration | Blocked with a clear message |
 | Registration after deadline | Blocked, activity shown as closed |
 | Activity full | Blocked with "This activity is full" |
-| Registrations not divisible by group size | Leftovers flagged, administrator decides |
-| Too few students for one group | Flagged for an administrator decision, leftover options shown |
+| Registrations not divisible by group size | Leftovers flagged; administrator adds them to existing groups or makes a new group |
+| Too few students for one group | No complete group proposed, so there are no existing groups to add to. Only "create a new group from the leftovers" is offered |
 | Saving groups fails | Nothing saved, no student shown as assigned |
 | Activity cancelled after registrations | Registrations marked cancelled, students see the status |
 | Administrator edits group size after registration | Field is locked |
-| Student withdraws before formation cutoff | Removed from the eligible list; if groups were already proposed, the proposal is discarded and must be regenerated |
-| Student withdraws after formation cutoff | Administrator removes from registrations page; if groups are proposed, proposal is discarded; if groups are finalised, affected group is marked awaiting decision |
-| Student withdraws after groups are finalised | Administrator removes from registrations page; affected group marked awaiting decision |
+| Student withdraws while registration is open and the deadline has not passed | Allowed. Removed from the eligible list; activity may return to `open` if it was full |
+| Student tries to withdraw after registration is closed | Blocked, even if the deadline has not passed. The roster is frozen; an administrator removes the student from the registrations page |
+| Registration reopened, deadline not yet passed | Students may once again register, withdraw, or re-register |
+| Registration reopened after the deadline has passed | Reopen is refused; the window stays shut |
+| Administrator removes a student after groups are finalised | Registration becomes `withdrawn`; affected group marked awaiting decision |
 | Session expires | User redirected to login with "Your session expired. Log in again." Then returned to the page they wanted. |
 | CSRF token missing or invalid | Form not processed; message: "That form expired. Reload the page and try again." |
 | Two students register for the last place simultaneously | Only one succeeds; the other sees "This activity is full." |
@@ -374,10 +387,10 @@ An activity can be cancelled at any point before completion.
 - Registration, duplicate prevention, and deadline enforcement.
 - Capacity enforcement and concurrent registration edge case.
 - Status changes across the activity lifecycle.
-- Withdrawal rules at each activity state.
+- Withdrawal rules across each activity state, including that closing registration blocks withdrawal before the deadline.
 - Edit-limit enforcement per activity state and field.
 - Group formation with exact multiples, leftovers, and too few students.
-- All three leftover-handling options.
+- Both leftover-handling options.
 - Repeat-pairing avoidance using sample history.
 - Safe saving of group results (transaction rollback on failure).
 - Closed Activities display and its overlap with My Registrations.
@@ -395,10 +408,12 @@ An activity can be cancelled at any point before completion.
 | Scenario | Expected result |
 |---|---|
 | 8 students, group size 4 | 2 complete groups |
-| 10 students, group size 4 | 2 groups and 2 leftovers flagged |
-| 3 students, group size 4 | No complete group, all flagged as awaiting decision |
+| 11 students, group size 3 | 3 complete groups and 2 leftovers flagged; administrator places the 2 either as a new group or into existing groups |
+| 3 students, group size 4 | No complete group. Only "create a new group from the leftovers" is available, producing one group of 3 |
 | Two students who worked together before | Placed apart if possible |
 | Not enough new pairings available | Repeat pairing allowed |
 | Student registers twice | Second attempt rejected |
+| Activity closed with 3 days until the deadline, student tries to withdraw | Blocked — the roster is frozen |
+| Activity closed, then reopened with the deadline still ahead | Student may withdraw, and a new student may register |
 | Student withdraws, activity was full | Activity returns to open |
 | Session expires mid-form | Redirect to login, then back to form page; entered data lost |

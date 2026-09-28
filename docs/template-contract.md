@@ -195,6 +195,10 @@ Used on the Dashboard, Available Activities, and Closed Activities pages.
 | `filters` | object | `q`, `date_from`, `closure_reason` |
 | `pagination` | object | `page`, `total_pages`, `total_items` |
 
+**`closure_reason`** is the activity status, restricted to `registration_closed`, `cancelled` or
+`completed`. The template supplies its own `closure_labels` map for these three values, so the
+backend does not need to send one.
+
 ---
 
 ### Profile — `student/profile.html`
@@ -266,6 +270,11 @@ This view is rendered when the administrator selects an activity to inspect its 
 | `rows` | list | See registration row object below |
 | `can_remove_student` | bool | Whether the administrator can remove a student from this activity |
 
+The sub-view is active when `sub_view == 'registrations'`. It is rendered from inside
+`admin/manage_activities.html` as an `{% if sub_view == 'registrations' and rows is defined %}`
+branch, so that template is shared by both the activity list and the registrations view. The list
+context (`activities`, `pagination`, `filters`) is still supplied alongside it, as documented above.
+
 **Registration row object**
 
 | Field | Type | Description |
@@ -289,9 +298,9 @@ This view is rendered when the administrator selects an activity to inspect its 
 | `formation_state` | string | `not_started`, `proposed`, or `finalised` |
 | `proposal` | list or None | Proposed groups when `formation_state` is `proposed`; each group has `label` and `members` (list of objects with `id` and `name`) |
 | `leftovers` | list | List of leftover student objects with `id` and `name` — needed so the administrator can take action on specific students |
-| `leftover_options` | list of strings | Options currently available: `smaller_group`, `change_group_size`, `leave_pending` |
+| `leftover_options` | list of strings | Options currently available: `add_to_existing_groups`, `new_group_from_leftovers` |
 | `can_start` | bool | True if group formation can be started |
-| `can_finalise` | bool | True if groups can be finalised (all leftovers resolved) |
+| `can_finalise` | bool | True if groups can be finalised (one of the two leftover options has been applied and no leftover is unplaced) |
 | `can_discard` | bool | True if the current proposal can be discarded |
 
 ---
@@ -311,9 +320,13 @@ This view is rendered when the administrator selects an activity to inspect its 
 | `activity_title` | string | Activity name |
 | `activity_date` | datetime | Activity start date |
 | `group_label` | string | e.g. "Group 1" |
-| `members` | list of strings | Member names |
+| `members` | list of objects | Each with `id` and `name`. The template renders these via `map(attribute='name')`, so they must be objects, not plain strings |
 | `formed_at` | datetime | When the group was finalised |
 | `status` | string | Group status key |
+
+**Naming note.** The list is also supplied as `groups`, and each entry also exposes `label` as an
+alias for `group_label`, because `group_history.html` uses those names. Prefer whichever pair you
+are changing, and update both.
 
 ---
 

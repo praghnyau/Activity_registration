@@ -354,9 +354,9 @@ After a successful password change, all other active sessions for that user are 
 - Open activities.
 - Total registrations.
 - Activities awaiting group formation.
-- Activities with unresolved cases (leftover students awaiting decision).
+- Activities with unresolved cases (leftovers not yet placed by the administrator).
 
-**Attention items**: activities needing action, with a reason such as "Ready for group formation" or "3 students awaiting decision."
+**Attention items**: activities needing action, with a reason such as "Ready for group formation" or "2 students left over."
 
 **Quick actions**: Create activity, View registrations, Manage group formation.
 
@@ -432,11 +432,10 @@ The form is split into sections.
 6. Administrator can discard the proposal (when `can_discard` is true) to start again.
 
 **Leftover options shown as buttons**
-- Allow a smaller group.
-- Change group size for this formation (re-runs proposal with new size).
-- Leave pending (sets affected students to `awaiting_decision`).
+- Add remaining students to existing groups (makes some groups larger than the required size).
+- Create a new group from the remaining students (one extra group, smaller than the required size).
 
-All leftovers must have a decision before finalisation is enabled.
+Finalisation is disabled until one of these two options has been applied. There is no leave-pending option and no change-group-size option.
 
 **Empty states**
 - No eligible students: "There are no eligible registrations to group."
@@ -487,7 +486,7 @@ All leftovers must have a decision before finalisation is enabled.
 | Registration deadline passes | Disable registration, show closed status |
 | Activity full | Show "Full" badge, disable registration |
 | Group formation completes | Show assigned group and members |
-| Group formation has leftovers | Show pending or awaiting-decision status |
+| Group formation has leftovers | Show which groups are awaiting the administrator's leftover decision |
 | Activity cancelled | Show cancellation status |
 | Data loading | Show loading indicator |
 | No activities available | Show empty state message |

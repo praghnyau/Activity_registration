@@ -1,38 +1,26 @@
 """
 admin.py — administrator routes.
 """
-import uuid
-from fastapi import APIRouter, Request, Form, Depends, Query
+from dataclasses import dataclass
+from types import SimpleNamespace
+
+from fastapi import APIRouter, Request, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select
 
 from app.database import get_db
 from app.dependencies import require_admin
+from app.models.activity import Activity, ActivityStatus
+from app.models.group import Group
+from app.models.registration import Registration, RegistrationStatus
 from app.models.user import User
 from app.services import activity_service as svc
-from app.services.auth_service import generate_csrf_token, verify_csrf_token
+from app.services import group_formation as formation
+from app.services import group_service as group_svc
+from app.templating import templates, add_flash, check_csrf
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-templates = Jinja2Templates(directory="app/templates")
-
-
-def _datetimeformat(value, fmt="%d %b %Y, %I:%M %p"):
-    if value is None:
-        return "—"
-    return value.strftime(fmt)
-
-templates.env.filters["datetimeformat"] = _datetimeformat
-
-
-def _csrf(request: Request) -> str:
-    if "session_id" not in request.session:
-        request.session["session_id"] = str(uuid.uuid4())
-    return generate_csrf_token(request.session["session_id"])
-
-
-def _check_csrf(request: Request, token: str) -> bool:
-    return verify_csrf_token(token, request.session.get("session_id", ""))
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
@@ -46,44 +34,46 @@ async def dashboard(
     result = await svc.list_activities_admin(db, page_size=5)
     activities = result["activities"]
 
-    from app.models.activity import ActivityStatus
-    from sqlalchemy import select, func
-    from app.models.registration import Registration, RegistrationStatus
-    from sqlalchemy import and_
-
-    total_result = await db.execute(select(func.count()).select_from(__import__('app.models.activity', fromlist=['Activity']).Activity))
+    total_result = await db.execute(select(func.count()).select_from(Activity))
     total_activities = total_result.scalar() or 0
 
     open_result = await db.execute(
-        select(func.count()).where(
-            __import__('app.models.activity', fromlist=['Activity']).Activity.status == ActivityStatus.open
-        )
+        select(func.count())
+        .select_from(Activity)
+        .where(Activity.status == ActivityStatus.open)
     )
     open_count = open_result.scalar() or 0
 
     reg_result = await db.execute(
-        select(func.count()).where(Registration.status == RegistrationStatus.registered)
+        select(func.count())
+        .select_from(Registration)
+        .where(Registration.status == RegistrationStatus.registered)
     )
     total_regs = reg_result.scalar() or 0
 
-    from app.models.activity import Activity
     pending_result = await db.execute(
-        select(func.count()).where(Activity.status == ActivityStatus.registration_closed)
+        select(func.count())
+        .select_from(Activity)
+        .where(Activity.status == ActivityStatus.registration_closed)
     )
     pending_formation = pending_result.scalar() or 0
 
-    return templates.TemplateResponse("admin/dashboard.html", {
-        "request": request,
-        "current_user": current_user,
-        "stats": {
-            "total_activities": total_activities,
-            "open_activities_count": open_count,
-            "total_registrations_count": total_regs,
-            "pending_group_formation_count": pending_formation,
+    return templates.TemplateResponse(
+        request,
+        "admin/dashboard.html",
+        {
+            "current_user": current_user,
+            "stats": {
+                "total_activities": total_activities,
+                "open_activities_count": open_count,
+                "total_registrations_count": total_regs,
+                "pending_group_formation_count": pending_formation,
+            },
+            "attention_items": [],
+            "recent_activities": activities,
+            "active_nav": "dashboard",
         },
-        "attention_items": [],
-        "recent_activities": activities,
-    })
+    )
 
 
 # ── Manage Activities ─────────────────────────────────────────────────────────
@@ -98,14 +88,17 @@ async def manage_activities(
     db: AsyncSession = Depends(get_db),
 ):
     result = await svc.list_activities_admin(db, q=q, status=status, page=page)
-    return templates.TemplateResponse("admin/manage_activities.html", {
-        "request": request,
-        "current_user": current_user,
-        "activities": result["activities"],
-        "pagination": result["pagination"],
-        "filters": {"q": q, "status": status},
-        "csrf_token": _csrf(request),
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/manage_activities.html",
+        {
+            "current_user": current_user,
+            "activities": result["activities"],
+            "pagination": result["pagination"],
+            "filters": {"q": q, "status": status},
+            "active_nav": "manage_activities",
+        },
+    )
 
 
 # ── Create / Edit Activity ────────────────────────────────────────────────────
@@ -121,13 +114,16 @@ async def activity_form_get(
     if activity_id:
         activity = await svc.get_activity_by_id(db, activity_id)
 
-    return templates.TemplateResponse("admin/activity_form.html", {
-        "request": request,
-        "current_user": current_user,
-        "activity": activity,
-        "form_errors": None,
-        "csrf_token": _csrf(request),
-    })
+    return templates.TemplateResponse(
+        request,
+        "admin/activity_form.html",
+        {
+            "current_user": current_user,
+            "activity": activity,
+            "form_errors": None,
+            "active_nav": "manage_activities",
+        },
+    )
 
 
 @router.post("/activities/new", response_class=HTMLResponse, name="admin.activity_form_post")
@@ -140,16 +136,22 @@ async def activity_form_post(
     data = dict(form)
 
     def render_form(errors, activity=None):
-        return templates.TemplateResponse("admin/activity_form.html", {
-            "request": request,
-            "current_user": current_user,
-            "activity": activity,
-            "form_errors": errors,
-            "csrf_token": _csrf(request),
-        }, status_code=400)
+        return templates.TemplateResponse(
+            request,
+            "admin/activity_form.html",
+            {
+                "current_user": current_user,
+                "activity": activity,
+                "form_errors": errors,
+                "active_nav": "manage_activities",
+            },
+            status_code=400,
+        )
 
-    if not _check_csrf(request, data.get("csrf_token", "")):
-        return render_form({"general": "Invalid request. Please try again."})
+    if not check_csrf(request, data.get("csrf_token", "")):
+        return render_form(
+            {"general": "That form expired. Reload the page and try again."}
+        )
 
     errors = svc.validate_activity_form(data)
     if errors:
@@ -164,14 +166,45 @@ async def activity_form_post(
         if not activity:
             return render_form({"general": "Activity not found."})
         await svc.update_activity(db, activity, data)
-        return RedirectResponse(url=f"/admin/activities?updated=1", status_code=303)
+        add_flash(request, "Activity updated.", "success")
+        return RedirectResponse(url="/admin/activities", status_code=303)
     else:
         # Create new activity
         await svc.create_activity(db, data, current_user)
-        return RedirectResponse(url="/admin/activities?created=1", status_code=303)
+        add_flash(request, "Activity created as a draft.", "success")
+        return RedirectResponse(url="/admin/activities", status_code=303)
 
 
 # ── Status actions ────────────────────────────────────────────────────────────
+
+async def _run_status_action(
+    request: Request,
+    db: AsyncSession,
+    activity_id: int,
+    action,
+    success_message: str,
+):
+    """
+    Shared body for the publish/close/cancel/complete routes.
+
+    Each service function returns (success, error_message); the error is
+    surfaced as a flash rather than being discarded.
+    """
+    form = await request.form()
+    if not check_csrf(request, form.get("csrf_token", "")):
+        add_flash(request, "That form expired. Reload the page and try again.", "error")
+        return RedirectResponse(url="/admin/activities", status_code=303)
+
+    activity = await svc.get_activity_by_id(db, activity_id)
+    if not activity:
+        add_flash(request, "Activity not found.", "error")
+        return RedirectResponse(url="/admin/activities", status_code=303)
+
+    success, error = await action(db, activity)
+    add_flash(request, success_message if success else error,
+              "success" if success else "error")
+    return RedirectResponse(url="/admin/activities", status_code=303)
+
 
 @router.post("/activities/{activity_id}/publish", name="admin.publish_activity")
 async def publish_activity(
@@ -180,14 +213,9 @@ async def publish_activity(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    form = await request.form()
-    if not _check_csrf(request, form.get("csrf_token", "")):
-        return RedirectResponse(url="/admin/activities", status_code=303)
-
-    activity = await svc.get_activity_by_id(db, activity_id)
-    if activity:
-        await svc.publish_activity(db, activity)
-    return RedirectResponse(url="/admin/activities", status_code=303)
+    return await _run_status_action(
+        request, db, activity_id, svc.publish_activity, "Activity published."
+    )
 
 
 @router.post("/activities/{activity_id}/close-registration", name="admin.close_registration")
@@ -197,14 +225,13 @@ async def close_registration(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    form = await request.form()
-    if not _check_csrf(request, form.get("csrf_token", "")):
-        return RedirectResponse(url="/admin/activities", status_code=303)
-
-    activity = await svc.get_activity_by_id(db, activity_id)
-    if activity:
-        await svc.close_registration(db, activity)
-    return RedirectResponse(url="/admin/activities", status_code=303)
+    return await _run_status_action(
+        request,
+        db,
+        activity_id,
+        svc.close_registration,
+        "Registration closed. The roster is now frozen.",
+    )
 
 
 @router.post("/activities/{activity_id}/cancel", name="admin.cancel_activity")
@@ -214,14 +241,9 @@ async def cancel_activity(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    form = await request.form()
-    if not _check_csrf(request, form.get("csrf_token", "")):
-        return RedirectResponse(url="/admin/activities", status_code=303)
-
-    activity = await svc.get_activity_by_id(db, activity_id)
-    if activity:
-        await svc.cancel_activity(db, activity)
-    return RedirectResponse(url="/admin/activities", status_code=303)
+    return await _run_status_action(
+        request, db, activity_id, svc.cancel_activity, "Activity cancelled."
+    )
 
 
 @router.post("/activities/{activity_id}/complete", name="admin.complete_activity")
@@ -231,39 +253,346 @@ async def complete_activity(
     current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    form = await request.form()
-    if not _check_csrf(request, form.get("csrf_token", "")):
-        return RedirectResponse(url="/admin/activities", status_code=303)
-
-    activity = await svc.get_activity_by_id(db, activity_id)
-    if activity:
-        await svc.complete_activity(db, activity)
-    return RedirectResponse(url="/admin/activities", status_code=303)
+    return await _run_status_action(
+        request, db, activity_id, svc.complete_activity, "Activity marked completed."
+    )
 
 
 # ── Stub routes ───────────────────────────────────────────────────────────────
 
+@dataclass
+class _GroupAdminView:
+    """Shape the group-formation template expects for one group."""
+
+    id: int
+    label: str
+    status: str
+    members: list
+
+
+def _formation_redirect(activity_id: int | None = None) -> RedirectResponse:
+    url = "/admin/group-formation"
+    if activity_id is not None:
+        url += f"?activity_id={activity_id}"
+    return RedirectResponse(url=url, status_code=303)
+
+
+async def _formation_action(request: Request, db: AsyncSession, activity_id, action) -> RedirectResponse:
+    """CSRF-check, run a formation service call, flash, redirect back."""
+    form = await request.form()
+    if not check_csrf(request, form.get("csrf_token", "")):
+        add_flash(request, "That form expired. Reload the page and try again.", "error")
+        return _formation_redirect(activity_id)
+    success, message = await action()
+    add_flash(request, message, "success" if success else "error")
+    return _formation_redirect(activity_id)
+
+
 @router.get("/group-formation", response_class=HTMLResponse, name="admin.group_formation")
 async def group_formation(
     request: Request,
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
+    activity_id: int | None = None,
 ):
-    return templates.TemplateResponse("admin/group_formation.html", {
-        "request": request,
+    context = {
         "current_user": current_user,
         "activity": None,
-        "proposed_groups": [],
-        "remainder_students": [],
-    })
+        "pending_activities": [],
+        "groups": [],
+        "ungrouped_students": [],
+        "active_nav": "group_formation",
+    }
+
+    # Activities awaiting group formation, newest deadline first.
+    pending_rows = await db.execute(
+        select(Activity, func.count(Registration.id))
+        .join(Registration, Registration.activity_id == Activity.id)
+        .where(
+            Activity.status.in_([ActivityStatus.registration_closed, ActivityStatus.groups_proposed]),
+            Registration.status == RegistrationStatus.registered,
+        )
+        .group_by(Activity.id)
+        .order_by(Activity.registration_deadline.desc())
+    )
+    pending = []
+    for activity, registered in pending_rows.all():
+        activity.registered_count = registered
+        activity.display_status = activity.status.value
+        pending.append(activity)
+    context["pending_activities"] = pending
+
+    if activity_id is None:
+        return templates.TemplateResponse(request, "admin/group_formation.html", context)
+
+    activity = await formation.get_activity_or_none(db, activity_id)
+    if activity is None:
+        add_flash(request, "Activity not found.", "error")
+        return _formation_redirect()
+
+    # activity_status_badge.html reads display_status / registered_count,
+    # normally attached by activity_service; this route loads the row directly.
+    activity.display_status = activity.status.value
+    activity.registered_count = await svc.get_registration_count(db, activity_id)
+
+    student_ids = await formation.eligible_student_ids(db, activity_id)
+    groups = await formation.get_groups_with_members(db, activity_id)
+    grouped = formation.grouped_student_ids(groups)
+    leftovers = [s for s in student_ids if s not in grouped]
+
+    users = {}
+    if leftovers:
+        rows = await db.execute(select(User).where(User.id.in_(leftovers)))
+        users = {u.id: u for u in rows.scalars().all()}
+
+    formation_state = (
+        "finalised" if activity.status == ActivityStatus.groups_formed
+        else "proposed" if activity.status == ActivityStatus.groups_proposed
+        else "not_started"
+    )
+    group_views = _group_views(groups)
+
+    # The template iterates `groups` and `ungrouped_students`; the contract keys
+    # (`proposal`, `leftovers`) are supplied too so either shape works.
+    context.update(
+        {
+            "activity": activity,
+            "groups": group_views,
+            "ungrouped_students": [users[s] for s in leftovers if s in users],
+            "summary": {
+                "eligible_count": len(student_ids),
+                "complete_groups_possible": len(student_ids) // activity.group_size,
+                "leftover_count": len(leftovers),
+                "has_history": bool(groups),
+            },
+            "formation_state": formation_state,
+            "proposal": group_views if formation_state == "proposed" else None,
+            "leftovers": [SimpleNamespace(id=s, name=users[s].name)
+                          for s in leftovers if s in users],
+            "leftover_options": _leftover_options(activity, groups, leftovers),
+            "can_start": activity.status == ActivityStatus.registration_closed and bool(student_ids),
+            "can_finalise": activity.status == ActivityStatus.groups_proposed and bool(groups) and not leftovers,
+            "can_discard": activity.status == ActivityStatus.groups_proposed,
+        }
+    )
+    return templates.TemplateResponse(request, "admin/group_formation.html", context)
+
+
+def _group_views(groups) -> list[_GroupAdminView]:
+    """Plain view objects for the template.
+
+    `Group.status` is a Python enum, and rendering it directly would put a
+    `GroupStatus.proposed` repr into the page, so the status is passed as a
+    plain string for the badge partial to look up.
+    """
+    return [
+        _GroupAdminView(
+            id=g.id,
+            label=g.label,
+            status=g.status.value,
+            members=[SimpleNamespace(id=m.student_id, name=m.student.name)
+                     for m in g.members],
+        )
+        for g in groups
+    ]
+
+
+def _leftover_options(activity: Activity, groups: list, leftovers: list[int]) -> list[str]:
+    """Only the two documented options, and only when they are actionable.
+
+    With no complete group there is nothing to add leftovers to, so the
+    create-a-new-group option is the only one offered.
+    """
+    if not leftovers:
+        return []
+    if any(g.members for g in groups):
+        return ["add_to_existing_groups", "new_group_from_leftovers"]
+    return ["new_group_from_leftovers"]
+
+
+@router.post("/activities/{activity_id}/formation/start", name="admin.start_formation")
+async def start_formation(
+    request: Request,
+    activity_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    return await _formation_action(
+        request, db, activity_id, lambda: formation.start_formation(db, activity_id)
+    )
+
+
+@router.post("/activities/{activity_id}/formation/create-group", name="admin.create_group")
+async def create_group(
+    request: Request,
+    activity_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    form = await request.form()
+    raw_ids = form.getlist("student_ids")
+    if not check_csrf(request, form.get("csrf_token", "")):
+        add_flash(request, "That form expired. Reload the page and try again.", "error")
+        return _formation_redirect(activity_id)
+
+    student_ids = [int(v) for v in raw_ids if str(v).isdigit()]
+    return await _formation_action(
+        request,
+        db,
+        activity_id,
+        lambda: formation.create_group_from_students(db, activity_id, student_ids),
+    )
+
+
+@router.post("/activities/{activity_id}/formation/leftovers/new-group", name="admin.new_group_from_leftovers")
+async def new_group_from_leftovers(
+    request: Request,
+    activity_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    return await _formation_action(
+        request, db, activity_id, lambda: formation.new_group_from_leftovers(db, activity_id)
+    )
+
+
+@router.post("/activities/{activity_id}/formation/leftovers/add-to-existing", name="admin.add_leftovers_to_existing")
+async def add_leftovers_to_existing(
+    request: Request,
+    activity_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    return await _formation_action(
+        request, db, activity_id, lambda: formation.add_leftovers_to_existing(db, activity_id)
+    )
+
+
+@router.post("/activities/{activity_id}/formation/finalize", name="admin.finalize_groups")
+async def finalize_groups(
+    request: Request,
+    activity_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    return await _formation_action(
+        request, db, activity_id, lambda: formation.finalise_groups(db, activity_id)
+    )
+
+
+@router.post("/activities/{activity_id}/formation/discard", name="admin.discard_formation")
+async def discard_formation(
+    request: Request,
+    activity_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    return await _formation_action(
+        request, db, activity_id, lambda: formation.discard_formation(db, activity_id)
+    )
+
+
+@router.post("/groups/{group_id}/disband", name="admin.remove_group")
+async def remove_group(
+    request: Request,
+    group_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    group = await db.get(Group, group_id)
+    activity_id = group.activity_id if group else None
+    return await _formation_action(
+        request, db, activity_id, lambda: formation.disband_group(db, group_id)
+    )
+
+
+@router.get(
+    "/activities/{activity_id}/registrations",
+    response_class=HTMLResponse,
+    name="admin.activity_registrations",
+)
+async def activity_registrations(
+    request: Request,
+    activity_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    result = await svc.list_activity_registrations(db, activity_id)
+    if result["activity"] is None:
+        add_flash(request, "Activity not found.", "error")
+        return RedirectResponse(url="/admin/activities", status_code=303)
+
+    # manage_activities.html is the shell for this sub-view, so its list context
+    # is supplied alongside the registrations data. The sub-view markup itself
+    # is not in the template yet (ISSUE 17).
+    listing = await svc.list_activities_admin(db)
+    return templates.TemplateResponse(
+        request,
+        "admin/manage_activities.html",
+        {
+            "current_user": current_user,
+            "activities": listing["activities"],
+            "filters": {"q": "", "status": "", "page": 1},
+            "pagination": listing["pagination"],
+            "activity": result["activity"],
+            "rows": result["rows"],
+            "can_remove_student": result["can_remove_student"],
+            "sub_view": "registrations",
+            "active_nav": "manage_activities",
+        },
+    )
+
+
+@router.post("/registrations/{registration_id}/remove", name="admin.remove_registration")
+async def remove_registration(
+    request: Request,
+    registration_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    form = await request.form()
+    if not check_csrf(request, form.get("csrf_token", "")):
+        add_flash(request, "That form expired. Reload the page and try again.", "error")
+        return RedirectResponse(url="/admin/activities", status_code=303)
+
+    # Read the activity first so the redirect lands back on the right sub-view.
+    registration = await db.get(Registration, registration_id)
+    activity_id = registration.activity_id if registration else None
+
+    ok, message = await group_svc.remove_student_registration(db, registration_id)
+    add_flash(request, message, "success" if ok else "error")
+
+    if activity_id is None:
+        return RedirectResponse(url="/admin/activities", status_code=303)
+    return RedirectResponse(
+        url=f"/admin/activities/{activity_id}/registrations", status_code=303
+    )
 
 
 @router.get("/group-history", response_class=HTMLResponse, name="admin.group_history")
 async def group_history(
     request: Request,
+    q: str = Query(default=""),
+    activity_id: str = Query(default=""),
+    date_from: str = Query(default=""),
+    page: int = Query(default=1),
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    return templates.TemplateResponse("admin/group_history.html", {
-        "request": request,
-        "current_user": current_user,
-        "groups": [],
-    })
+    result = await group_svc.list_group_history(
+        db, q=q, activity_id=activity_id, date_from=date_from, page=page
+    )
+    # Supplied under both names: the template iterates `groups`, while
+    # template-contract.md names the list `entries` (ISSUE 11).
+    return templates.TemplateResponse(
+        request,
+        "admin/group_history.html",
+        {
+            "current_user": current_user,
+            "groups": result["entries"],
+            "entries": result["entries"],
+            "filters": {"q": q, "activity_id": activity_id, "date_from": date_from},
+            "pagination": result["pagination"],
+            "active_nav": "group_history",
+        },
+    )

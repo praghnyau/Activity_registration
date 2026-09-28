@@ -15,7 +15,19 @@ async def get_current_user(request: Request, db: AsyncSession = Depends(get_db))
     if not user_id:
         return None
     result = await db.execute(select(User).where(User.id == user_id))
-    return result.scalar_one_or_none()
+    user = result.scalar_one_or_none()
+    if user is None:
+        return None
+
+    # A password change bumps session_version, which invalidates every cookie
+    # minted before it. Without this the "end other sessions" requirement would
+    # be unenforceable, because signed cookies cannot be revoked individually.
+    cookie_version = request.session.get("session_version")
+    if cookie_version is not None and cookie_version != user.session_version:
+        request.session.clear()
+        return None
+
+    return user
 
 
 async def require_student(request: Request, db: AsyncSession = Depends(get_db)) -> User:
