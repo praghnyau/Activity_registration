@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Registration Confirmed — Activity Registration{% endblock %}
+{% block page_title %}Registration Confirmed{% endblock %}
+
+{% block content %}
+<div style="max-width:520px;margin:0 auto;">
+  <div class="card">
+    <div style="text-align:center;margin-bottom:1.25rem;">
+      <span style="font-size:2.5rem;">✅</span>
+      <h1 style="font-size:1.2rem;margin-top:0.5rem;">Registration Successful</h1>
+    </div>
+
+    <div style="font-size:0.9rem;">
+      <div class="mb-1">
+        <span class="text-secondary">Activity:</span>
+        <strong>{{ activity.title }}</strong>
+      </div>
+      <div class="mb-1">
+        <span class="text-secondary">Date:</span>
+        {{ activity.starts_at | datetimeformat }}
+      </div>
+      <div class="mb-1">
+        <span class="text-secondary">Registered on:</span>
+        {{ registration.registered_at | datetimeformat }}
+      </div>
+      <div class="mb-1">
+        <span class="text-secondary">Registration status:</span>
+        {% set reg_status = registration.status %}
+        {% include "partials/reg_status_badge.html" %}
+      </div>
+      <div class="mb-2">
+        <span class="text-secondary">Group status:</span>
+        {% set group_status = group_status %}
+        {% include "partials/group_status_badge.html" %}
+      </div>
+
+      {% if group_status == 'not_yet_formed' %}
+        <p class="text-secondary text-sm">
+          Registration successful. Your group has not been assigned yet.
+        </p>
+      {% endif %}
+    </div>
+
+    <hr class="divider">
+    <a href="{{ url_for('student.my_registrations') }}" class="btn btn-primary">Go to My Registrations</a>
+  </div>
+</div>
+{% endblock %}

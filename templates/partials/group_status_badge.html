@@ -1,0 +1,12 @@
+{#
+  Renders a group status badge.
+  Expects: group_status (string key)
+#}
+{% set _map = {
+  'not_yet_formed':    ('pending', 'Not Yet Formed'),
+  'group_formed':      ('success', 'Group Formed'),
+  'awaiting_decision': ('pending', 'Awaiting Admin Decision'),
+  'no_group':          ('closed',  'No Group Assigned'),
+} %}
+{% set _pair = _map.get(group_status, ('closed', group_status)) %}
+<span class="badge badge-{{ _pair[0] }}">{{ _pair[1] }}</span>

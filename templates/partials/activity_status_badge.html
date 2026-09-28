@@ -1,0 +1,16 @@
+{#
+  Renders a status badge for an activity display_status key.
+  Expects: activity.display_status
+#}
+{% set _status_map = {
+  'draft':               ('closed',  'Draft'),
+  'open':                ('success', 'Open'),
+  'full':                ('pending', 'Full'),
+  'registration_closed': ('closed',  'Registration Closed'),
+  'groups_proposed':     ('pending', 'Groups Proposed'),
+  'groups_formed':       ('success', 'Groups Formed'),
+  'cancelled':           ('error',   'Cancelled'),
+  'completed':           ('closed',  'Completed'),
+} %}
+{% set _pair = _status_map.get(activity.display_status, ('closed', activity.display_status)) %}
+<span class="badge badge-{{ _pair[0] }}">{{ _pair[1] }}</span>

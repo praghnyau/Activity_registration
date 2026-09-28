@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Available Activities — Activity Registration{% endblock %}
+{% block page_title %}Available Activities{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Available Activities</h1>
+</div>
+
+{# Filters #}
+<form method="get" class="filter-bar" aria-label="Filter activities">
+  <div>
+    <label class="form-label" for="q">Search</label>
+    <input class="form-control" type="search" id="q" name="q" placeholder="Keyword…" value="{{ filters.q or '' }}">
+  </div>
+  <div>
+    <label class="form-label" for="date_from">From date</label>
+    <input class="form-control" type="date" id="date_from" name="date_from" value="{{ filters.date_from or '' }}">
+  </div>
+  <div>
+    <label class="form-label" for="availability">Availability</label>
+    <select class="form-control" id="availability" name="availability">
+      <option value="">All</option>
+      <option value="open" {{ 'selected' if filters.availability == 'open' }}>Open</option>
+      <option value="full" {{ 'selected' if filters.availability == 'full' }}>Full</option>
+    </select>
+  </div>
+  <div style="align-self:flex-end;">
+    <button type="submit" class="btn btn-primary">Apply</button>
+    <a href="{{ url_for('student.activities') }}" class="btn btn-secondary">Clear</a>
+  </div>
+</form>
+
+{% if activities %}
+  <div class="card-grid">
+    {% for activity in activities %}
+      {% include "partials/activity_card.html" %}
+    {% endfor %}
+  </div>
+
+  {# Pagination #}
+  {% if pagination.total_pages > 1 %}
+    <nav class="pagination" aria-label="Pagination">
+      {% if pagination.page > 1 %}
+        <a href="?page={{ pagination.page - 1 }}&q={{ filters.q or '' }}&date_from={{ filters.date_from or '' }}&availability={{ filters.availability or '' }}">← Prev</a>
+      {% else %}
+        <span class="disabled">← Prev</span>
+      {% endif %}
+
+      {% for p in range(1, pagination.total_pages + 1) %}
+        {% if p == pagination.page %}
+          <span class="current">{{ p }}</span>
+        {% else %}
+          <a href="?page={{ p }}&q={{ filters.q or '' }}&date_from={{ filters.date_from or '' }}&availability={{ filters.availability or '' }}">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if pagination.page < pagination.total_pages %}
+        <a href="?page={{ pagination.page + 1 }}&q={{ filters.q or '' }}&date_from={{ filters.date_from or '' }}&availability={{ filters.availability or '' }}">Next →</a>
+      {% else %}
+        <span class="disabled">Next →</span>
+      {% endif %}
+    </nav>
+  {% endif %}
+
+{% elif filters.q or filters.date_from or filters.availability %}
+  <div class="empty-state">
+    <div class="empty-state-title">No activities match your search.</div>
+    <div class="empty-state-body">Try a different keyword or clear the filters.</div>
+    <a href="{{ url_for('student.activities') }}" class="btn btn-secondary">Clear Filters</a>
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-state-title">No activities are open for registration.</div>
+    <div class="empty-state-body">Check back soon, or browse past activities.</div>
+    <a href="{{ url_for('student.closed_activities') }}" class="btn btn-secondary">Browse Closed Activities</a>
+  </div>
+{% endif %}
+{% endblock %}

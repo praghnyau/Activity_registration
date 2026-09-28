@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Activity Registration</title>
+  <script>
+    (function(){
+      var p;
+      try { p = localStorage.getItem('theme') || 'system'; } catch(e){ p = 'system'; }
+      var resolved = p === 'system'
+        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : p;
+      document.documentElement.setAttribute('data-theme', resolved);
+    })();
+  </script>
+  <link rel="stylesheet" href="{{ url_for('static', path='css/main.css') }}">
+</head>
+<body>
+
+<div class="login-topbar">
+  <button class="theme-toggle" id="theme-toggle" aria-label="Toggle theme">🌙</button>
+</div>
+
+<div class="login-page">
+  <div class="login-card">
+    <div class="login-brand">
+      <span class="login-brand-icon">🎓</span>
+      <span class="login-brand-name">Activity Registration</span>
+    </div>
+
+    {% if form_errors and form_errors.general %}
+      <div class="flash flash-error mb-2" role="alert">{{ form_errors.general }}</div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('auth.login') }}" id="login-form" novalidate>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      {% if next_url %}
+        <input type="hidden" name="next" value="{{ next_url }}">
+      {% endif %}
+
+      <div class="form-group">
+        <label class="form-label" for="email">College Email <span class="required" aria-hidden="true">*</span></label>
+        <input
+          class="form-control"
+          type="email"
+          id="email"
+          name="email"
+          autocomplete="email"
+          required
+          aria-describedby="err-email"
+          value="{{ form_errors.email_value if form_errors else '' }}"
+        >
+        <span class="form-error" id="err-email" role="alert">
+          {{ form_errors.email if form_errors and form_errors.email else '' }}
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="password">Password <span class="required" aria-hidden="true">*</span></label>
+        <div class="input-wrap">
+          <input
+            class="form-control"
+            type="password"
+            id="password"
+            name="password"
+            autocomplete="current-password"
+            required
+            aria-describedby="err-password"
+          >
+          <button type="button" class="toggle-pw" aria-label="Show password">Show</button>
+        </div>
+        <span class="form-error" id="err-password" role="alert">
+          {{ form_errors.password if form_errors and form_errors.password else '' }}
+        </span>
+      </div>
+
+      <p class="text-sm text-secondary mb-2">
+        Forgot your password? Contact your administrator.
+      </p>
+
+      <button type="submit" class="btn btn-primary w-full">Log In</button>
+    </form>
+  </div>
+</div>
+
+<script src="{{ url_for('static', path='js/main.js') }}"></script>
+</body>
+</html>

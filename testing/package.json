@@ -1,0 +1,20 @@
+{
+  "name": "activity-registration-group-formation-testing",
+  "version": "1.0.0",
+  "description": "College Activity Registration & Intelligent Group Formation System Backend & Test Engine",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/runTests.js"
+  },
+  "keywords": [
+    "group-formation",
+    "activity-registration",
+    "college-system",
+    "algorithm",
+    "testing"
+  ],
+  "author": "Antigravity",
+  "license": "ISC"
+}
