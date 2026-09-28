@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ activity.title }} — Activity Registration{% endblock %}
+{% block page_title %}Activity Details{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ activity.title }}</h1>
+  {% include "partials/activity_status_badge.html" %}
+</div>
+
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:1.25rem;align-items:start;">
+
+  {# Left: details #}
+  <div>
+    <div class="card mb-2">
+      <p class="mb-2">{{ activity.description }}</p>
+
+      <hr class="divider">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;font-size:0.875rem;">
+        <div>
+          <div class="text-secondary">Date &amp; Time</div>
+          <div>{{ activity.starts_at | datetimeformat }}</div>
+        </div>
+        <div>
+          <div class="text-secondary">Duration</div>
+          <div>{{ activity.duration_minutes }} minutes</div>
+        </div>
+        <div>
+          <div class="text-secondary">Group Size</div>
+          <div>{{ activity.group_size }} students</div>
+        </div>
+        <div>
+          <div class="text-secondary">Registration Deadline</div>
+          <div>{{ activity.registration_deadline | datetimeformat }}</div>
+        </div>
+        <div>
+          <div class="text-secondary">Group Formation Cutoff</div>
+          <div>{{ activity.formation_cutoff | datetimeformat if activity.formation_cutoff else '—' }}</div>
+        </div>
+        {% if activity.capacity %}
+        <div>
+          <div class="text-secondary">Capacity</div>
+          <div>{{ activity.capacity }}</div>
+        </div>
+        {% endif %}
+        {% if activity.location %}
+        <div style="grid-column:span 2;">
+          <div class="text-secondary">Venue / Link</div>
+          <div>{{ activity.location }}</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Resources #}
+    <div class="card">
+      <div class="section-title">Resources</div>
+      {% if resources %}
+        <ul style="list-style:none;font-size:0.875rem;">
+          {% for r in resources %}
+            <li style="padding:0.3rem 0;">
+              🔗 <a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="text-secondary text-sm">No resources have been attached.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Right: registration panel #}
+  <div class="card">
+    {% if my_registration %}
+      <div class="section-title">Your Registration</div>
+      <div class="mb-1 text-sm">
+        <span class="text-secondary">Registered:</span>
+        {{ my_registration.registered_at | datetimeformat }}
+      </div>
+      <div class="mb-1">
+        {% set reg_status = my_registration.status %}
+        {% include "partials/reg_status_badge.html" %}
+      </div>
+      <div class="mb-2">
+        {% set group_status = my_registration.group_status %}
+        {% include "partials/group_status_badge.html" %}
+        {% if my_registration.group_label %}
+          <span class="text-sm text-secondary ml-1">— {{ my_registration.group_label }}</span>
+        {% endif %}
+      </div>
+
+      {% if can_withdraw %}
+        <button
+          class="btn btn-danger btn-sm"
+          data-confirm-dialog="withdraw-dialog"
+          aria-haspopup="dialog"
+        >Withdraw Registration</button>
+      {% elif withdraw_blocked_reason %}
+        <button class="btn btn-danger btn-sm" disabled aria-disabled="true">Withdraw Registration</button>
+        <p class="form-hint mt-1">{{ withdraw_blocked_reason }}</p>
+      {% endif %}
+
+    {% elif can_register %}
+      <div class="section-title">Register</div>
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        <input class="form-control" type="text" value="{{ prefill.name }}" readonly aria-readonly="true">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-control" type="email" value="{{ prefill.email }}" readonly aria-readonly="true">
+      </div>
+      <button
+        class="btn btn-primary w-full"
+        data-confirm-dialog="register-dialog"
+        aria-haspopup="dialog"
+      >Register for Activity</button>
+
+    {% else %}
+      <div class="section-title">Registration</div>
+      <button class="btn btn-primary w-full" disabled aria-disabled="true">Register for Activity</button>
+      {% if register_blocked_reason %}
+        <p class="form-hint mt-1">{{ register_blocked_reason }}</p>
+      {% endif %}
+    {% endif %}
+  </div>
+
+</div>
+
+{# Register confirmation dialog #}
+{% if can_register %}
+<div class="dialog-overlay" id="register-dialog" role="dialog" aria-modal="true" aria-labelledby="register-dialog-title">
+  <div class="dialog">
+    <div class="dialog-title" id="register-dialog-title">Confirm Registration</div>
+    <div class="dialog-body">
+      You are registering for <strong>{{ activity.title }}</strong> on {{ activity.starts_at | datetimeformat }}.
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" data-dialog-cancel>Cancel</button>
+      <form method="post" action="{{ url_for('student.register', activity_id=activity.id) }}" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-primary">Confirm Registration</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# Withdraw confirmation dialog #}
+{% if can_withdraw %}
+<div class="dialog-overlay" id="withdraw-dialog" role="dialog" aria-modal="true" aria-labelledby="withdraw-dialog-title">
+  <div class="dialog">
+    <div class="dialog-title" id="withdraw-dialog-title">Confirm Withdrawal</div>
+    <div class="dialog-body">
+      Are you sure you want to withdraw from <strong>{{ activity.title }}</strong>? This cannot be undone.
+    </div>
+    <div class="dialog-actions">
+      <button class="btn btn-secondary" data-dialog-cancel>Cancel</button>
+      <form method="post" action="{{ url_for('student.withdraw', registration_id=my_registration.id) }}" style="display:inline;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-danger">Withdraw</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

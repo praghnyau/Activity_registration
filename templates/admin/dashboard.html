@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — Activity Registration{% endblock %}
+{% block page_title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<h1 class="mb-2">Welcome, {{ current_user.name }}</h1>
+
+{# Stats #}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.total_activities }}</div>
+    <div class="stat-label">Total Activities</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.open_activities_count }}</div>
+    <div class="stat-label">Open for Registration</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.total_registrations_count }}</div>
+    <div class="stat-label">Total Registrations</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.pending_group_formation_count }}</div>
+    <div class="stat-label">Awaiting Group Formation</div>
+  </div>
+</div>
+
+{# Attention items #}
+{% if attention_items %}
+  <div class="section-title mt-3">Needs Your Attention</div>
+  {% for item in attention_items %}
+    <div class="attention-box">
+      <span>
+        <strong>{{ item.activity_title }}</strong> —
+        Registration deadline passed {{ item.registration_deadline | datetimeformat }},
+        {{ item.registered_count }} students registered
+      </span>
+      <a href="{{ url_for('admin.group_formation') }}?activity_id={{ item.activity_id }}" class="btn btn-sm btn-primary">Form Groups</a>
+    </div>
+  {% endfor %}
+{% endif %}
+
+{# Recent / upcoming activities #}
+<div class="section-title mt-3">Recent Activities</div>
+{% if recent_activities %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Status</th>
+          <th>Starts</th>
+          <th>Registrations</th>
+          <th>Deadline</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for activity in recent_activities %}
+          <tr>
+            <td>{{ activity.title }}</td>
+            <td>{% include "partials/activity_status_badge.html" %}</td>
+            <td>{{ activity.starts_at | datetimeformat }}</td>
+            <td>{{ activity.registered_count }}{% if activity.capacity %} / {{ activity.capacity }}{% endif %}</td>
+            <td>{{ activity.registration_deadline | datetimeformat }}</td>
+            <td>
+              <a href="{{ url_for('admin.activity_form') }}?activity_id={{ activity.id }}" class="btn btn-secondary btn-sm">Edit</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-state-title">No activities yet.</div>
+    <div class="empty-state-body">Create your first activity to get started.</div>
+    <a href="{{ url_for('admin.activity_form') }}" class="btn btn-primary">Create Activity</a>
+  </div>
+{% endif %}
+
+{# Quick links #}
+<div class="section-title mt-3">Quick Links</div>
+<div class="quick-links">
+  <a href="{{ url_for('admin.activity_form') }}" class="btn btn-secondary">➕ Create Activity</a>
+  <a href="{{ url_for('admin.manage_activities') }}" class="btn btn-secondary">⚙️ Manage Activities</a>
+  <a href="{{ url_for('admin.group_formation') }}" class="btn btn-secondary">🔀 Group Formation</a>
+  <a href="{{ url_for('admin.group_history') }}" class="btn btn-secondary">📚 Group History</a>
+</div>
+{% endblock %}

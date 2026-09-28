@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Activity Registration{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<h1 class="mb-2">Welcome, {{ current_user.name }}</h1>
+
+{# Stats #}
+<div class="stat-grid">
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.available_count }}</div>
+    <div class="stat-label">Available Activities</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.registered_count }}</div>
+    <div class="stat-label">Active Registrations</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-value">{{ stats.groups_formed_count }}</div>
+    <div class="stat-label">Groups Formed</div>
+  </div>
+</div>
+
+{# Attention items #}
+{% if attention_items %}
+  <div class="section-title mt-3">Needs Your Attention</div>
+  {% for item in attention_items %}
+    <div class="attention-box">
+      <span>
+        <strong>{{ item.activity_title }}</strong> —
+        {{ item.starts_at | datetimeformat }}
+        &nbsp;
+        {% include "partials/badge.html" with context %}
+        {# group_status badge #}
+        {% set status_key = item.group_status %}
+        {% include "partials/group_status_badge.html" with context %}
+      </span>
+      <a href="{{ url_for('student.activity_detail', activity_id=item.activity_id) }}" class="btn btn-sm btn-secondary">View</a>
+    </div>
+  {% endfor %}
+{% endif %}
+
+{# Upcoming activities #}
+<div class="section-title mt-3">Upcoming Activities</div>
+{% if upcoming_activities %}
+  <div class="card-grid">
+    {% for activity in upcoming_activities %}
+      {% include "partials/activity_card.html" %}
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-state-title">No upcoming activities right now.</div>
+    <div class="empty-state-body">New activities will appear here when they're published.</div>
+  </div>
+{% endif %}
+
+{# Quick links #}
+<div class="section-title mt-3">Quick Links</div>
+<div class="quick-links">
+  <a href="{{ url_for('student.activities') }}" class="btn btn-secondary">Available Activities</a>
+  <a href="{{ url_for('student.my_registrations') }}" class="btn btn-secondary">My Registrations</a>
+  <a href="{{ url_for('student.my_groups') }}" class="btn btn-secondary">My Groups</a>
+  <a href="{{ url_for('student.closed_activities') }}" class="btn btn-secondary">Closed Activities</a>
+</div>
+{% endblock %}

@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Closed Activities — Activity Registration{% endblock %}
+{% block page_title %}Closed Activities{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Closed Activities</h1>
+</div>
+
+<form method="get" class="filter-bar" aria-label="Filter closed activities">
+  <div>
+    <label class="form-label" for="q">Search</label>
+    <input class="form-control" type="search" id="q" name="q" placeholder="Keyword…" value="{{ filters.q or '' }}">
+  </div>
+  <div>
+    <label class="form-label" for="date_from">From date</label>
+    <input class="form-control" type="date" id="date_from" name="date_from" value="{{ filters.date_from or '' }}">
+  </div>
+  <div>
+    <label class="form-label" for="closure_reason">Reason</label>
+    <select class="form-control" id="closure_reason" name="closure_reason">
+      <option value="">All</option>
+      <option value="registration_closed" {{ 'selected' if filters.closure_reason == 'registration_closed' }}>Registration Closed</option>
+      <option value="cancelled" {{ 'selected' if filters.closure_reason == 'cancelled' }}>Cancelled</option>
+      <option value="completed" {{ 'selected' if filters.closure_reason == 'completed' }}>Completed</option>
+    </select>
+  </div>
+  <div style="align-self:flex-end;">
+    <button type="submit" class="btn btn-primary">Apply</button>
+    <a href="{{ url_for('student.closed_activities') }}" class="btn btn-secondary">Clear</a>
+  </div>
+</form>
+
+{% set closure_labels = {
+  'registration_closed': 'Registration deadline has passed.',
+  'cancelled': 'This activity was cancelled.',
+  'completed': 'This activity has been completed.',
+} %}
+
+{% if activities %}
+  <div class="card-grid">
+    {% for activity in activities %}
+      <div class="card">
+        <div class="flex items-center justify-between mb-1">
+          {% include "partials/activity_status_badge.html" %}
+        </div>
+        <div class="card-title">{{ activity.title }}</div>
+        <div class="card-meta">📅 {{ activity.starts_at | datetimeformat }}</div>
+        <div class="card-meta">👥 Group size: {{ activity.group_size }}</div>
+        {% if activity.closure_reason %}
+          <div class="text-sm text-secondary mb-1">{{ closure_labels.get(activity.closure_reason, activity.closure_reason) }}</div>
+        {% endif %}
+        <a href="{{ url_for('student.activity_detail', activity_id=activity.id) }}" class="btn btn-secondary btn-sm">View Details</a>
+      </div>
+    {% endfor %}
+  </div>
+
+  {% if pagination.total_pages > 1 %}
+    <nav class="pagination" aria-label="Pagination">
+      {% if pagination.page > 1 %}
+        <a href="?page={{ pagination.page - 1 }}&q={{ filters.q or '' }}&date_from={{ filters.date_from or '' }}&closure_reason={{ filters.closure_reason or '' }}">← Prev</a>
+      {% else %}
+        <span class="disabled">← Prev</span>
+      {% endif %}
+      {% for p in range(1, pagination.total_pages + 1) %}
+        {% if p == pagination.page %}<span class="current">{{ p }}</span>
+        {% else %}<a href="?page={{ p }}&q={{ filters.q or '' }}&date_from={{ filters.date_from or '' }}&closure_reason={{ filters.closure_reason or '' }}">{{ p }}</a>{% endif %}
+      {% endfor %}
+      {% if pagination.page < pagination.total_pages %}
+        <a href="?page={{ pagination.page + 1 }}&q={{ filters.q or '' }}&date_from={{ filters.date_from or '' }}&closure_reason={{ filters.closure_reason or '' }}">Next →</a>
+      {% else %}
+        <span class="disabled">Next →</span>
+      {% endif %}
+    </nav>
+  {% endif %}
+
+{% elif filters.q or filters.date_from or filters.closure_reason %}
+  <div class="empty-state">
+    <div class="empty-state-title">No closed activities match your filters.</div>
+    <a href="{{ url_for('student.closed_activities') }}" class="btn btn-secondary">Clear Filters</a>
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-state-title">No closed activities yet.</div>
+    <div class="empty-state-body">Past, cancelled, and closed activities will appear here.</div>
+  </div>
+{% endif %}
+{% endblock %}

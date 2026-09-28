@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}My Registrations — Activity Registration{% endblock %}
+{% block page_title %}My Registrations{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>My Registrations</h1>
+</div>
+
+<form method="get" class="filter-bar" aria-label="Search registrations">
+  <div>
+    <label class="form-label" for="q">Search</label>
+    <input class="form-control" type="search" id="q" name="q" placeholder="Activity name…" value="{{ filters.q or '' }}">
+  </div>
+  <div style="align-self:flex-end;">
+    <button type="submit" class="btn btn-primary">Search</button>
+    <a href="{{ url_for('student.my_registrations') }}" class="btn btn-secondary">Clear</a>
+  </div>
+</form>
+
+{% if registrations %}
+  <div style="display:flex;flex-direction:column;gap:1rem;">
+    {% for entry in registrations %}
+      <div class="card">
+        <div class="flex items-center justify-between flex-wrap gap-1 mb-1">
+          <div class="card-title">{{ entry.activity.title }}</div>
+          <div class="flex gap-1 flex-wrap">
+            {% set reg_status = entry.registration_status %}
+            {% include "partials/reg_status_badge.html" %}
+            {% set group_status = entry.group_status %}
+            {% include "partials/group_status_badge.html" %}
+          </div>
+        </div>
+
+        <div class="card-meta">
+          📅 {{ entry.activity.starts_at | datetimeformat }}
+          &nbsp;·&nbsp;
+          Registered: {{ entry.registered_at | datetimeformat }}
+        </div>
+
+        {% if entry.group_summary %}
+          <div class="text-sm mt-1">
+            👥 {{ entry.group_summary.label }} · {{ entry.group_summary.member_count }} members
+          </div>
+        {% endif %}
+
+        <div class="flex gap-1 flex-wrap mt-2">
+          <a href="{{ url_for('student.activity_detail', activity_id=entry.activity.id) }}" class="btn btn-secondary btn-sm">View Activity</a>
+
+          {% if entry.can_withdraw %}
+            <button
+              class="btn btn-danger btn-sm"
+              data-confirm-dialog="withdraw-dialog-{{ entry.registration_id }}"
+              aria-haspopup="dialog"
+            >Withdraw</button>
+          {% elif entry.withdraw_blocked_reason %}
+            <button class="btn btn-danger btn-sm" disabled aria-disabled="true" title="{{ entry.withdraw_blocked_reason }}">Withdraw</button>
+          {% endif %}
+        </div>
+      </div>
+
+      {# Withdraw dialog per entry #}
+      {% if entry.can_withdraw %}
+      <div class="dialog-overlay" id="withdraw-dialog-{{ entry.registration_id }}" role="dialog" aria-modal="true" aria-labelledby="wd-title-{{ entry.registration_id }}">
+        <div class="dialog">
+          <div class="dialog-title" id="wd-title-{{ entry.registration_id }}">Confirm Withdrawal</div>
+          <div class="dialog-body">
+            Withdraw from <strong>{{ entry.activity.title }}</strong>? This cannot be undone.
+          </div>
+          <div class="dialog-actions">
+            <button class="btn btn-secondary" data-dialog-cancel>Cancel</button>
+            <form method="post" action="{{ url_for('student.withdraw', registration_id=entry.registration_id) }}" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="btn btn-danger">Withdraw</button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+    {% endfor %}
+  </div>
+
+  {% if pagination.total_pages > 1 %}
+    <nav class="pagination" aria-label="Pagination">
+      {% if pagination.page > 1 %}
+        <a href="?page={{ pagination.page - 1 }}&q={{ filters.q or '' }}">← Prev</a>
+      {% else %}
+        <span class="disabled">← Prev</span>
+      {% endif %}
+      {% for p in range(1, pagination.total_pages + 1) %}
+        {% if p == pagination.page %}<span class="current">{{ p }}</span>
+        {% else %}<a href="?page={{ p }}&q={{ filters.q or '' }}">{{ p }}</a>{% endif %}
+      {% endfor %}
+      {% if pagination.page < pagination.total_pages %}
+        <a href="?page={{ pagination.page + 1 }}&q={{ filters.q or '' }}">Next →</a>
+      {% else %}
+        <span class="disabled">Next →</span>
+      {% endif %}
+    </nav>
+  {% endif %}
+
+{% elif filters.q %}
+  <div class="empty-state">
+    <div class="empty-state-title">No registrations match your search.</div>
+    <a href="{{ url_for('student.my_registrations') }}" class="btn btn-secondary">Clear Filters</a>
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-state-title">You haven't registered for anything yet.</div>
+    <div class="empty-state-body">Find an activity to get started.</div>
+    <a href="{{ url_for('student.activities') }}" class="btn btn-primary">Browse Activities</a>
+  </div>
+{% endif %}
+{% endblock %}

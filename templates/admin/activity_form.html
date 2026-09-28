@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit Activity' if activity else 'Create Activity' }} — Activity Registration{% endblock %}
+{% block page_title %}{{ 'Edit Activity' if activity else 'Create Activity' }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>{{ 'Edit Activity' if activity else 'Create New Activity' }}</h1>
+</div>
+
+{% if form_errors and form_errors.general %}
+  <div class="flash flash-error mb-2" role="alert">{{ form_errors.general }}</div>
+{% endif %}
+
+<div class="card" style="max-width:760px;">
+  <form
+    method="post"
+    action="{{ url_for('admin.activity_form') }}{% if activity %}?activity_id={{ activity.id }}{% endif %}"
+    id="activity-form"
+    novalidate
+  >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if activity %}
+      <input type="hidden" name="activity_id" value="{{ activity.id }}">
+    {% endif %}
+
+    <div class="form-group">
+      <label class="form-label" for="title">Title <span class="required" aria-hidden="true">*</span></label>
+      <input
+        class="form-control" type="text" id="title" name="title"
+        value="{{ activity.title if activity else (form_errors.title_value if form_errors else '') }}"
+        required aria-describedby="err-title"
+      >
+      <span class="form-error" id="err-title" role="alert">
+        {{ form_errors.title if form_errors and form_errors.title else '' }}
+      </span>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="short_description">Short Description</label>
+      <input
+        class="form-control" type="text" id="short_description" name="short_description"
+        value="{{ activity.short_description if activity else '' }}"
+        maxlength="140" placeholder="One line shown on activity cards"
+      >
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="description">Full Description</label>
+      <textarea
+        class="form-control" id="description" name="description" rows="4"
+      >{{ activity.description if activity else '' }}</textarea>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+      <div class="form-group">
+        <label class="form-label" for="starts_at">Activity Date &amp; Time <span class="required" aria-hidden="true">*</span></label>
+        <input
+          class="form-control" type="datetime-local" id="starts_at" name="starts_at"
+          value="{{ activity.starts_at_input if activity else '' }}"
+          required aria-describedby="err-starts_at"
+        >
+        <span class="form-error" id="err-starts_at" role="alert">
+          {{ form_errors.starts_at if form_errors and form_errors.starts_at else '' }}
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="duration_minutes">Duration (minutes)</label>
+        <input
+          class="form-control" type="number" min="1" id="duration_minutes" name="duration_minutes"
+          value="{{ activity.duration_minutes if activity else '' }}"
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="registration_deadline">Registration Deadline <span class="required" aria-hidden="true">*</span></label>
+        <input
+          class="form-control" type="datetime-local" id="registration_deadline" name="registration_deadline"
+          value="{{ activity.registration_deadline_input if activity else '' }}"
+          required aria-describedby="err-registration_deadline"
+        >
+        <span class="form-error" id="err-registration_deadline" role="alert">
+          {{ form_errors.registration_deadline if form_errors and form_errors.registration_deadline else '' }}
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="formation_cutoff">Group Formation Cutoff</label>
+        <input
+          class="form-control" type="datetime-local" id="formation_cutoff" name="formation_cutoff"
+          value="{{ activity.formation_cutoff_input if activity else '' }}"
+        >
+        <span class="form-hint">Optional. Defaults to the registration deadline if left blank.</span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="group_size">Group Size <span class="required" aria-hidden="true">*</span></label>
+        <input
+          class="form-control" type="number" min="1" id="group_size" name="group_size"
+          value="{{ activity.group_size if activity else '' }}"
+          required aria-describedby="err-group_size"
+        >
+        <span class="form-error" id="err-group_size" role="alert">
+          {{ form_errors.group_size if form_errors and form_errors.group_size else '' }}
+        </span>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="capacity">Capacity</label>
+        <input
+          class="form-control" type="number" min="1" id="capacity" name="capacity"
+          value="{{ activity.capacity if activity else '' }}"
+        >
+        <span class="form-hint">Optional. Leave blank for unlimited registrations.</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="location">Venue / Link</label>
+      <input
+        class="form-control" type="text" id="location" name="location"
+        value="{{ activity.location if activity else '' }}"
+        placeholder="Room number, or a video call link"
+      >
+    </div>
+
+    {# Resource links — repeatable rows, wired up by main.js #}
+    <div class="form-group">
+      <label class="form-label">Resource Links</label>
+      <div id="resource-links-container" style="display:flex;flex-direction:column;gap:0.5rem;">
+        {% if activity and activity.resources %}
+          {% for r in activity.resources %}
+            <div class="resource-row">
+              <input type="text" name="resource_title_{{ loop.index0 }}" class="form-control" placeholder="Link title" aria-label="Resource title" value="{{ r.title }}">
+              <input type="url" name="resource_url_{{ loop.index0 }}" class="form-control" placeholder="https://..." aria-label="Resource URL" value="{{ r.url }}">
+              <button type="button" class="btn-remove" aria-label="Remove link">Remove</button>
+            </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm mt-1" id="add-resource-link">+ Add Link</button>
+      <span class="form-hint">Up to 5 links. URLs must start with https://</span>
+    </div>
+
+    <div class="flex gap-2 mt-2">
+      <button type="submit" class="btn btn-primary">{{ 'Update Activity' if activity else 'Create Activity' }}</button>
+      <a href="{{ url_for('admin.manage_activities') }}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

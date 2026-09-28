@@ -1,0 +1,30 @@
+{#
+  Reusable activity card.
+  Expects: activity (activity card object)
+#}
+<div class="card">
+  <div class="flex items-center justify-between mb-1">
+    {% include "partials/activity_status_badge.html" %}
+    {% if activity.my_registration_status %}
+      {% set reg_status = activity.my_registration_status %}
+      {% include "partials/reg_status_badge.html" %}
+    {% endif %}
+  </div>
+  <div class="card-title">{{ activity.title }}</div>
+  <div class="card-meta">
+    📅 {{ activity.starts_at | datetimeformat }}
+    {% if activity.duration_minutes %} · {{ activity.duration_minutes }} min{% endif %}
+  </div>
+  {% if activity.location %}
+    <div class="card-meta">📍 {{ activity.location }}</div>
+  {% endif %}
+  <div class="card-meta">
+    👥 Group size: {{ activity.group_size }}
+    &nbsp;·&nbsp;
+    ⏰ Deadline: {{ activity.registration_deadline | datetimeformat }}
+  </div>
+  {% if activity.short_description %}
+    <div class="card-desc">{{ activity.short_description }}</div>
+  {% endif %}
+  <a href="{{ url_for('student.activity_detail', activity_id=activity.id) }}" class="btn btn-primary btn-sm">View Details</a>
+</div>

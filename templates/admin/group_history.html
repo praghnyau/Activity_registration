@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Group History — Activity Registration{% endblock %}
+{% block page_title %}Group History{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h1>Group History</h1>
+</div>
+
+<form method="get" class="filter-bar" aria-label="Filter group history">
+  <div>
+    <label class="form-label" for="q">Search</label>
+    <input class="form-control" type="search" id="q" name="q" placeholder="Activity name…" value="{{ filters.q or '' }}">
+  </div>
+  <div>
+    <label class="form-label" for="date_from">From date</label>
+    <input class="form-control" type="date" id="date_from" name="date_from" value="{{ filters.date_from or '' }}">
+  </div>
+  <div style="align-self:flex-end;">
+    <button type="submit" class="btn btn-primary">Apply</button>
+    <a href="{{ url_for('admin.group_history') }}" class="btn btn-secondary">Clear</a>
+  </div>
+</form>
+
+{% if groups %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Activity</th>
+          <th>Group</th>
+          <th>Members</th>
+          <th>Formed On</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for group in groups %}
+          <tr>
+            <td>{{ group.activity_title }}</td>
+            <td>{{ group.label }}</td>
+            <td>{{ group.members | map(attribute='name') | join(', ') }}</td>
+            <td>{{ group.formed_at | datetimeformat }}</td>
+            <td>{% set group_status = group.status %}{% include "partials/group_status_badge.html" %}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pagination.total_pages > 1 %}
+    <nav class="pagination" aria-label="Pagination">
+      {% if pagination.page > 1 %}
+        <a href="?page={{ pagination.page - 1 }}&q={{ filters.q or '' }}&date_from={{ filters.date_from or '' }}">← Prev</a>
+      {% else %}
+        <span class="disabled">← Prev</span>
+      {% endif %}
+      {% for p in range(1, pagination.total_pages + 1) %}
+        {% if p == pagination.page %}<span class="current">{{ p }}</span>
+        {% else %}<a href="?page={{ p }}&q={{ filters.q or '' }}&date_from={{ filters.date_from or '' }}">{{ p }}</a>{% endif %}
+      {% endfor %}
+      {% if pagination.page < pagination.total_pages %}
+        <a href="?page={{ pagination.page + 1 }}&q={{ filters.q or '' }}&date_from={{ filters.date_from or '' }}">Next →</a>
+      {% else %}
+        <span class="disabled">Next →</span>
+      {% endif %}
+    </nav>
+  {% endif %}
+
+{% elif filters.q or filters.date_from %}
+  <div class="empty-state">
+    <div class="empty-state-title">No groups match your filters.</div>
+    <a href="{{ url_for('admin.group_history') }}" class="btn btn-secondary">Clear Filters</a>
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-state-title">No groups have been formed yet.</div>
+    <div class="empty-state-body">Finalized groups will appear here once an activity's groups are published.</div>
+  </div>
+{% endif %}
+{% endblock %}

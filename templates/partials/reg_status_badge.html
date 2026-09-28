@@ -1,0 +1,11 @@
+{#
+  Renders a registration status badge.
+  Expects: reg_status (string key)
+#}
+{% set _map = {
+  'registered':  ('success', 'Registered'),
+  'withdrawn':   ('closed',  'Withdrawn'),
+  'cancelled':   ('error',   'Cancelled'),
+} %}
+{% set _pair = _map.get(reg_status, ('closed', reg_status)) %}
+<span class="badge badge-{{ _pair[0] }}">{{ _pair[1] }}</span>
